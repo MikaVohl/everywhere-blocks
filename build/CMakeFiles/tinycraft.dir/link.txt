@@ -1,1 +1,0 @@
-/usr/bin/c++ -g -Wl,-search_paths_first -Wl,-headerpad_max_install_names CMakeFiles/tinycraft.dir/src/main.cpp.o CMakeFiles/tinycraft.dir/src/camera.cpp.o -o tinycraft  -Wl,-rpath,/usr/local/lib /usr/local/lib/libglfw.3.4.dylib /usr/local/lib/libglm.dylib -framework OpenGL -framework Cocoa -framework IOKit -framework CoreVideo

@@ -43,6 +43,11 @@ static void glfw_error_callback(int code, const char* desc) {
 static void framebuffer_size_callback(GLFWwindow*, int w, int h) {
     glViewport(0, 0, w, h);
 }
+static void scroll_callback(GLFWwindow* win, double xoffset, double yoffset) {
+    // change camera FOV
+    Camera* cam = static_cast<Camera*>(glfwGetWindowUserPointer(win));
+    cam->fov -= float(yoffset);
+}
 
 static GLuint compile(GLenum type, const char* src) {
     GLuint id = glCreateShader(type);
@@ -82,7 +87,8 @@ static GLuint link(GLuint vs, GLuint fs) {
 static void processKeyboard(GLFWwindow* win, Camera& cam, float dt) {
     glm::vec3 f = cam.front();
     glm::vec3 r = cam.right();
-    glm::vec3 u = glm::vec3(0,1,0);
+    glm::vec3 u = glm::vec3(0,1,0); // use world up
+    // glm::vec3 u = cam.up(); // use camera up
     float v = cam.moveSpeed * dt;
 
     if (glfwGetKey(win, GLFW_KEY_W) == GLFW_PRESS) cam.pos += f * v;
@@ -104,11 +110,12 @@ int main() {
     glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
 #endif
 
-    GLFWwindow* win = glfwCreateWindow(1280, 720, "TinyCraft - camera + cube", nullptr, nullptr);
+    GLFWwindow* win = glfwCreateWindow(1280, 720, "TinyCraft", nullptr, nullptr);
     if (!win) { glfwTerminate(); return 1; }
     glfwMakeContextCurrent(win);
     glfwSwapInterval(1);
     glfwSetFramebufferSizeCallback(win, framebuffer_size_callback);
+    // glfwSetScrollCallback(win, scroll_callback);
 
     glfwSetInputMode(win, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
@@ -163,10 +170,12 @@ int main() {
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3*sizeof(float), (void*)0);
 
     Camera cam;
+    glfwSetWindowUserPointer(win, &cam);
 
     double lastTime = glfwGetTime();
     double lastX = 0.0, lastY = 0.0;
     bool firstMouse = true;
+    // bool first = true;
 
     while (!glfwWindowShouldClose(win)) {
         double now = glfwGetTime();
@@ -177,6 +186,11 @@ int main() {
 
         if (glfwGetKey(win, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
             glfwSetInputMode(win, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+        }
+        // on mouse click enter cursor lock
+        if (glfwGetMouseButton(win, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
+            glfwSetInputMode(win, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+            firstMouse = true; // reset mouse position
         }
 
         // Mouse look
@@ -201,9 +215,29 @@ int main() {
         float aspect = (h>0) ? (float)w / (float)h : 1.0f;
 
         glm::mat4 m = glm::mat4(1.0f); // model
+        // glm::mat4 m = glm::rotate(glm::mat4(1.0f), (float)now, glm::vec3(0,1,0)); // have the cube rotate
         glm::mat4 v = cam.view();
         glm::mat4 p = cam.proj(aspect);
         glm::mat4 mvp = p * v * m;
+
+        // if (first) {
+        //     printf("M matrix:\n");
+        //     printf("  %f %f %f %f\n", m[0][0], m[0][1], m[0][2], m[0][3]);
+        //     printf("  %f %f %f %f\n", m[1][0], m[1][1], m[1][2], m[1][3]);
+        //     printf("  %f %f %f %f\n", m[2][0], m[2][1], m[2][2], m[2][3]);
+        //     printf("  %f %f %f %f\n", m[3][0], m[3][1], m[3][2], m[3][3]);
+        //     printf("V matrix:\n");
+        //     printf("  %f %f %f %f\n", v[0][0], v[0][1], v[0][2], v[0][3]);
+        //     printf("  %f %f %f %f\n", v[1][0], v[1][1], v[1][2], v[1][3]);
+        //     printf("  %f %f %f %f\n", v[2][0], v[2][1], v[2][2], v[2][3]);
+        //     printf("  %f %f %f %f\n", v[3][0], v[3][1], v[3][2], v[3][3]);
+        //     printf("P matrix:\n");
+        //     printf("  %f %f %f %f\n", p[0][0], p[0][1], p[0][2], p[0][3]);
+        //     printf("  %f %f %f %f\n", p[1][0], p[1][1], p[1][2], p[1][3]);
+        //     printf("  %f %f %f %f\n", p[2][0], p[2][1], p[2][2], p[2][3]);
+        //     printf("  %f %f %f %f\n", p[3][0], p[3][1], p[3][2], p[3][3]);
+        //     first = false;
+        // }
 
         glEnable(GL_DEPTH_TEST);
         glViewport(0,0,w,h);

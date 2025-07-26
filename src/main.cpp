@@ -16,6 +16,7 @@
 #include "gfx/Texture.h"
 #include "gfx/Mesh.h"
 #include "gfx/InstanceBuffer.h"
+#include "gfx/Renderer.h"
 
 #define GL_CALL(x) do { \
     x; \
@@ -184,13 +185,10 @@ int main() {
 
 
     glfwSetInputMode(win, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-
-    ShaderProgram shader(kVS, kFS);
-    GLuint prog = shader.id();
-    GLint uVP = glGetUniformLocation(prog, "uVP");
-
-    glUseProgram(prog);
-    glUniform1iv(glGetUniformLocation(prog, "uTex"), 2, (int[]){0,1});
+    CubeMesh cube;
+    Renderer renderer(kVS, kFS, cube);
+    glUseProgram(renderer.shader().id());
+    glUniform1iv(glGetUniformLocation(renderer.shader().id(), "uTex"), 2, (int[]){0,1});
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, tex[0].texID);
     glActiveTexture(GL_TEXTURE1);
@@ -199,7 +197,6 @@ int main() {
     Camera cam;
     glfwSetWindowUserPointer(win, &cam);
 
-    CubeMesh cube;
     std::vector<BlockInstance> terrainBlocks;
     for (int x = -TERRAIN_WIDTH / 2; x < TERRAIN_WIDTH / 2; ++x) {
         for (int z = -TERRAIN_WIDTH / 2; z < TERRAIN_WIDTH / 2; ++z) {
@@ -367,16 +364,11 @@ int main() {
             needUpload = false;
         }
 
-        glUseProgram(prog);
-        glUniformMatrix4fv(uVP, 1, GL_FALSE, glm::value_ptr(vp));
-        glBindVertexArray(cube.getVAO());
-        glDrawElementsInstanced(GL_TRIANGLES, cube.getIndexCount(), GL_UNSIGNED_INT, 0, terrainBlocks.size());
-        glBindVertexArray(0);
+        renderer.draw(vp, terrainBlocks.size());
 
         glfwSwapBuffers(win);
     }
-
-    glDeleteProgram(prog);
+    
 
     glfwDestroyWindow(win);
     glfwTerminate();

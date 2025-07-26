@@ -1,3 +1,4 @@
+#pragma once
 #include <OpenGL/gl3.h>
 
 class CubeMesh {

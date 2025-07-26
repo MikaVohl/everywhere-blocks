@@ -1,3 +1,4 @@
+#pragma once
 #include "../../external/stb_image.h"
 #include <OpenGL/gl3.h>
 #include <string>

@@ -11,6 +11,8 @@ add_executable(tinycraft
     src/main.cpp
     src/camera.cpp
     src/gfx/Shader.cpp
+    src/gfx/Texture.cpp
+    external/stb_image.cpp
 )
 
 # Stop GLFW from including legacy GL headers & silence Apple’s deprecation warning

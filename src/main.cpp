@@ -10,12 +10,10 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
-#define STB_IMAGE_IMPLEMENTATION
-#include "../external/stb_image.h"
-
 
 #include "camera.h"
 #include "gfx/Shader.h"
+#include "gfx/Texture.h"
 
 struct CubeMesh {
     GLuint vao; // vao stands for "Vertex Array Object". It stores references to vertex attributes and buffers.
@@ -252,26 +250,11 @@ int main() {
     glfwSetFramebufferSizeCallback(win, framebuffer_size_callback);
     // glfwSetScrollCallback(win, scroll_callback);
 
-    int w1,h1,n1,w2,h2,n2;
-    stbi_set_flip_vertically_on_load(true);
-    unsigned char* data1 = stbi_load("assets/tile.png", &w1, &h1, &n1, 4); // RGBA
-    unsigned char* data2 = stbi_load("assets/turf.png", &w2, &h2, &n2, 4); // RGBA
+    Texture2D tex[2]; // Define two textures
+    tex[0].load("assets/tile.png");
+    tex[1].load("assets/turf.png");
 
-    GLuint tex[2];
-    glGenTextures(2, tex);
-    glBindTexture(GL_TEXTURE_2D, tex[0]);
-    glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA8, w1,h1,0,GL_RGBA,GL_UNSIGNED_BYTE,data1);
-    glGenerateMipmap(GL_TEXTURE_2D);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    stbi_image_free(data1);
 
-    glBindTexture(GL_TEXTURE_2D, tex[1]);
-    glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA8, w2,h2,0,GL_RGBA,GL_UNSIGNED_BYTE,data2);
-    glGenerateMipmap(GL_TEXTURE_2D);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    stbi_image_free(data2);
 
     glfwSetInputMode(win, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
@@ -282,9 +265,9 @@ int main() {
     glUseProgram(prog);
     glUniform1iv(glGetUniformLocation(prog, "uTex"), 2, (int[]){0,1});
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, tex[0]);
+    glBindTexture(GL_TEXTURE_2D, tex[0].texID);
     glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, tex[1]);
+    glBindTexture(GL_TEXTURE_2D, tex[1].texID);
 
     Camera cam;
     glfwSetWindowUserPointer(win, &cam);

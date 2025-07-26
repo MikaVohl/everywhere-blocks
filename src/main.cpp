@@ -9,8 +9,60 @@
 
 #include <glm/glm.hpp>
 #include <glm/gtc/type_ptr.hpp>
+#include <vector>
+
 
 #include "camera.h"
+
+struct CubeMesh {
+    GLuint vao;
+    GLuint vbo;
+    GLuint ebo;
+    GLsizei indexCount;
+};
+
+CubeMesh createCubeMesh() {
+    float verts[] = {
+        // front face
+        -0.5f,-0.5f, 0.5f,
+         0.5f,-0.5f, 0.5f,
+         0.5f, 0.5f, 0.5f,
+        -0.5f, 0.5f, 0.5f,
+        // back face
+        -0.5f,-0.5f,-0.5f,
+         0.5f,-0.5f,-0.5f,
+         0.5f, 0.5f,-0.5f,
+        -0.5f, 0.5f,-0.5f,
+    };
+    unsigned idx[] = {
+        // front
+        0,1,2,  2,3,0,
+        // right
+        1,5,6,  6,2,1,
+        // back
+        5,4,7,  7,6,5,
+        // left
+        4,0,3,  3,7,4,
+        // top
+        3,2,6,  6,7,3,
+        // bottom
+        4,5,1,  1,0,4
+    };
+    CubeMesh mesh{};
+    glGenVertexArrays(1, &mesh.vao);
+    glBindVertexArray(mesh.vao);
+    glGenBuffers(1, &mesh.vbo);
+    glBindBuffer(GL_ARRAY_BUFFER, mesh.vbo);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(verts), verts, GL_STATIC_DRAW);
+    glGenBuffers(1, &mesh.ebo);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh.ebo);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(idx), idx, GL_STATIC_DRAW);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3*sizeof(float), (void*)0);
+    mesh.indexCount = sizeof(idx)/sizeof(idx[0]);
+    glBindVertexArray(0);
+    return mesh;
+}
 
 #define GL_CALL(x) do { \
     x; \
@@ -126,51 +178,15 @@ int main() {
     glDeleteShader(fs);
     GLint uMVP = glGetUniformLocation(prog, "uMVP");
 
-    // Indexed cube (positions only)
-    float verts[] = {
-        // front face
-        -0.5f,-0.5f, 0.5f,
-         0.5f,-0.5f, 0.5f,
-         0.5f, 0.5f, 0.5f,
-        -0.5f, 0.5f, 0.5f,
-        // back face
-        -0.5f,-0.5f,-0.5f,
-         0.5f,-0.5f,-0.5f,
-         0.5f, 0.5f,-0.5f,
-        -0.5f, 0.5f,-0.5f,
-    };
-    unsigned idx[] = {
-        // front
-        0,1,2,  2,3,0,
-        // right
-        1,5,6,  6,2,1,
-        // back
-        5,4,7,  7,6,5,
-        // left
-        4,0,3,  3,7,4,
-        // top
-        3,2,6,  6,7,3,
-        // bottom
-        4,5,1,  1,0,4
-    };
-
-    GLuint vao=0, vbo=0, ebo=0;
-    glGenVertexArrays(1, &vao);
-    glBindVertexArray(vao);
-
-    glGenBuffers(1, &vbo);
-    glBindBuffer(GL_ARRAY_BUFFER, vbo);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(verts), verts, GL_STATIC_DRAW);
-
-    glGenBuffers(1, &ebo);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(idx), idx, GL_STATIC_DRAW);
-
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3*sizeof(float), (void*)0);
 
     Camera cam;
     glfwSetWindowUserPointer(win, &cam);
+
+    CubeMesh cube = createCubeMesh();
+    std::vector<glm::mat4> modelMatrices = {
+        glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 0.0f)),
+        glm::translate(glm::mat4(1.0f), glm::vec3(2.0f, 0.0f, 0.0f))
+    };
 
     double lastTime = glfwGetTime();
     double lastX = 0.0, lastY = 0.0;
@@ -214,30 +230,8 @@ int main() {
         int w, h; glfwGetFramebufferSize(win, &w, &h);
         float aspect = (h>0) ? (float)w / (float)h : 1.0f;
 
-        glm::mat4 m = glm::mat4(1.0f); // model
-        // glm::mat4 m = glm::rotate(glm::mat4(1.0f), (float)now, glm::vec3(0,1,0)); // have the cube rotate
         glm::mat4 v = cam.view();
         glm::mat4 p = cam.proj(aspect);
-        glm::mat4 mvp = p * v * m;
-
-        // if (first) {
-        //     printf("M matrix:\n");
-        //     printf("  %f %f %f %f\n", m[0][0], m[0][1], m[0][2], m[0][3]);
-        //     printf("  %f %f %f %f\n", m[1][0], m[1][1], m[1][2], m[1][3]);
-        //     printf("  %f %f %f %f\n", m[2][0], m[2][1], m[2][2], m[2][3]);
-        //     printf("  %f %f %f %f\n", m[3][0], m[3][1], m[3][2], m[3][3]);
-        //     printf("V matrix:\n");
-        //     printf("  %f %f %f %f\n", v[0][0], v[0][1], v[0][2], v[0][3]);
-        //     printf("  %f %f %f %f\n", v[1][0], v[1][1], v[1][2], v[1][3]);
-        //     printf("  %f %f %f %f\n", v[2][0], v[2][1], v[2][2], v[2][3]);
-        //     printf("  %f %f %f %f\n", v[3][0], v[3][1], v[3][2], v[3][3]);
-        //     printf("P matrix:\n");
-        //     printf("  %f %f %f %f\n", p[0][0], p[0][1], p[0][2], p[0][3]);
-        //     printf("  %f %f %f %f\n", p[1][0], p[1][1], p[1][2], p[1][3]);
-        //     printf("  %f %f %f %f\n", p[2][0], p[2][1], p[2][2], p[2][3]);
-        //     printf("  %f %f %f %f\n", p[3][0], p[3][1], p[3][2], p[3][3]);
-        //     first = false;
-        // }
 
         glEnable(GL_DEPTH_TEST);
         glViewport(0,0,w,h);
@@ -245,16 +239,20 @@ int main() {
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         glUseProgram(prog);
-        glUniformMatrix4fv(uMVP, 1, GL_FALSE, glm::value_ptr(mvp));
-        glBindVertexArray(vao);
-        glDrawElements(GL_TRIANGLES, sizeof(idx)/sizeof(idx[0]), GL_UNSIGNED_INT, 0);
+        glBindVertexArray(cube.vao);
+        for (const auto& m : modelMatrices) {
+            glm::mat4 mvp = p * v * m;
+            glUniformMatrix4fv(uMVP, 1, GL_FALSE, glm::value_ptr(mvp));
+            glDrawElements(GL_TRIANGLES, cube.indexCount, GL_UNSIGNED_INT, 0);
+        }
+        glBindVertexArray(0);
 
         glfwSwapBuffers(win);
     }
 
-    glDeleteBuffers(1, &ebo);
-    glDeleteBuffers(1, &vbo);
-    glDeleteVertexArrays(1, &vao);
+    glDeleteBuffers(1, &cube.ebo);
+    glDeleteBuffers(1, &cube.vbo);
+    glDeleteVertexArrays(1, &cube.vao);
     glDeleteProgram(prog);
 
     glfwDestroyWindow(win);

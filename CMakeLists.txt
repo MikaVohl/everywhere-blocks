@@ -12,6 +12,7 @@ add_executable(tinycraft
     src/camera.cpp
     src/gfx/Shader.cpp
     src/gfx/Texture.cpp
+    src/gfx/Mesh.cpp
     external/stb_image.cpp
 )
 

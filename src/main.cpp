@@ -14,81 +14,7 @@
 #include "camera.h"
 #include "gfx/Shader.h"
 #include "gfx/Texture.h"
-
-struct CubeMesh {
-    GLuint vao; // vao stands for "Vertex Array Object". It stores references to vertex attributes and buffers.
-    GLuint vbo; // vbo stands for "Vertex Buffer Object". It stores vertex data like positions, normals, texture coordinates, etc. Array of positions (8 sets of xyz, 8 sets of normals, ...))
-    GLuint ebo; // ebo stands for "Element Buffer Object". It stores indices that define how vertices are connected to form triangles.
-    GLsizei indexCount;
-};
-
-CubeMesh createCubeMesh() {
-    float verts[] = {
-        // Front face (z = +0.5)
-        -0.5f, -0.5f,  0.5f, 0.0f, 0.0f, // 0
-         0.5f, -0.5f,  0.5f, 1.0f, 0.0f, // 1
-         0.5f,  0.5f,  0.5f, 1.0f, 1.0f, // 2
-        -0.5f,  0.5f,  0.5f, 0.0f, 1.0f, // 3
-
-        // Right face (x = +0.5)
-         0.5f, -0.5f,  0.5f, 0.0f, 0.0f, // 4
-         0.5f, -0.5f, -0.5f, 1.0f, 0.0f, // 5
-         0.5f,  0.5f, -0.5f, 1.0f, 1.0f, // 6
-         0.5f,  0.5f,  0.5f, 0.0f, 1.0f, // 7
-
-        // Back face (z = -0.5)
-         0.5f, -0.5f, -0.5f, 0.0f, 0.0f, // 8
-        -0.5f, -0.5f, -0.5f, 1.0f, 0.0f, // 9
-        -0.5f,  0.5f, -0.5f, 1.0f, 1.0f, // 10
-         0.5f,  0.5f, -0.5f, 0.0f, 1.0f, // 11
-
-        // Left face (x = -0.5)
-        -0.5f, -0.5f, -0.5f, 0.0f, 0.0f, // 12
-        -0.5f, -0.5f,  0.5f, 1.0f, 0.0f, // 13
-        -0.5f,  0.5f,  0.5f, 1.0f, 1.0f, // 14
-        -0.5f,  0.5f, -0.5f, 0.0f, 1.0f, // 15
-
-        // Top face (y = +0.5)
-        -0.5f,  0.5f,  0.5f, 0.0f, 0.0f, // 16
-         0.5f,  0.5f,  0.5f, 1.0f, 0.0f, // 17
-         0.5f,  0.5f, -0.5f, 1.0f, 1.0f, // 18
-        -0.5f,  0.5f, -0.5f, 0.0f, 1.0f, // 19
-
-        // Bottom face (y = -0.5)
-        -0.5f, -0.5f, -0.5f, 0.0f, 0.0f, // 20
-         0.5f, -0.5f, -0.5f, 1.0f, 0.0f, // 21
-         0.5f, -0.5f,  0.5f, 1.0f, 1.0f, // 22
-        -0.5f, -0.5f,  0.5f, 0.0f, 1.0f, // 23
-    };
-    unsigned idx[] = {
-        // Front face
-        0, 1, 2,  2, 3, 0,
-        // Right face
-        4, 5, 6,  6, 7, 4,
-        // Back face
-        8, 9,10, 10,11, 8,
-        // Left face
-        12,13,14, 14,15,12,
-        // Top face
-        16,17,18, 18,19,16,
-        // Bottom face
-        20,21,22, 22,23,20
-    };
-    CubeMesh mesh{};
-    glGenVertexArrays(1, &mesh.vao);
-    glBindVertexArray(mesh.vao);
-    glGenBuffers(1, &mesh.vbo);
-    glBindBuffer(GL_ARRAY_BUFFER, mesh.vbo);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(verts), verts, GL_STATIC_DRAW);
-    glGenBuffers(1, &mesh.ebo);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh.ebo);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(idx), idx, GL_STATIC_DRAW);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3*sizeof(float), (void*)0);
-    mesh.indexCount = sizeof(idx)/sizeof(idx[0]);
-    glBindVertexArray(0);
-    return mesh;
-}
+#include "gfx/Mesh.h"
 
 #define GL_CALL(x) do { \
     x; \
@@ -272,7 +198,7 @@ int main() {
     Camera cam;
     glfwSetWindowUserPointer(win, &cam);
 
-    CubeMesh cube = createCubeMesh();
+    CubeMesh cube;
     struct BlockInstance {
         glm::vec3 pos;
         int texIndex;
@@ -297,8 +223,8 @@ int main() {
     glBindBuffer(GL_ARRAY_BUFFER, instanceVBO);
     glBufferData(GL_ARRAY_BUFFER, terrainBlocks.size() * sizeof(BlockInstance), terrainBlocks.data(), GL_STATIC_DRAW);
 
-    glBindVertexArray(cube.vao);
-    glBindBuffer(GL_ARRAY_BUFFER, cube.vbo); // Bind cube.vbo, set per-vertex attributes 0 & 2
+    glBindVertexArray(cube.getVAO());
+    glBindBuffer(GL_ARRAY_BUFFER, cube.getVBO()); // Bind cube.vbo, set per-vertex attributes 0 & 2
     glEnableVertexAttribArray(0); // Position attribute (location 0)
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)0);
     glVertexAttribDivisor(0, 0); // per-vertex
@@ -449,17 +375,14 @@ int main() {
 
         glUseProgram(prog);
         glUniformMatrix4fv(uVP, 1, GL_FALSE, glm::value_ptr(vp));
-        glBindVertexArray(cube.vao);
-        glDrawElementsInstanced(GL_TRIANGLES, cube.indexCount, GL_UNSIGNED_INT, 0, terrainBlocks.size());
+        glBindVertexArray(cube.getVAO());
+        glDrawElementsInstanced(GL_TRIANGLES, cube.getIndexCount(), GL_UNSIGNED_INT, 0, terrainBlocks.size());
         glBindVertexArray(0);
 
         glfwSwapBuffers(win);
     }
 
-    glDeleteBuffers(1, &cube.ebo);
-    glDeleteBuffers(1, &cube.vbo);
     glDeleteBuffers(1, &instanceVBO);
-    glDeleteVertexArrays(1, &cube.vao);
     glDeleteProgram(prog);
 
     glfwDestroyWindow(win);

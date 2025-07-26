@@ -11,6 +11,9 @@
 #include <glm/gtc/type_ptr.hpp>
 #include <vector>
 
+#define STB_IMAGE_IMPLEMENTATION
+#include "../external/stb_image.h"
+
 
 #include "camera.h"
 
@@ -22,31 +25,56 @@ struct CubeMesh {
 };
 
 CubeMesh createCubeMesh() {
-    float verts[] = { // relative to the center of the cube (0,0,0)
-        // front face
-        -0.5f,-0.5f, 0.5f,
-         0.5f,-0.5f, 0.5f,
-         0.5f, 0.5f, 0.5f,
-        -0.5f, 0.5f, 0.5f,
-        // back face
-        -0.5f,-0.5f,-0.5f,
-         0.5f,-0.5f,-0.5f,
-         0.5f, 0.5f,-0.5f,
-        -0.5f, 0.5f,-0.5f,
+    float verts[] = {
+        // Front face (z = +0.5)
+        -0.5f, -0.5f,  0.5f, 0.0f, 0.0f, // 0
+         0.5f, -0.5f,  0.5f, 1.0f, 0.0f, // 1
+         0.5f,  0.5f,  0.5f, 1.0f, 1.0f, // 2
+        -0.5f,  0.5f,  0.5f, 0.0f, 1.0f, // 3
+
+        // Right face (x = +0.5)
+         0.5f, -0.5f,  0.5f, 0.0f, 0.0f, // 4
+         0.5f, -0.5f, -0.5f, 1.0f, 0.0f, // 5
+         0.5f,  0.5f, -0.5f, 1.0f, 1.0f, // 6
+         0.5f,  0.5f,  0.5f, 0.0f, 1.0f, // 7
+
+        // Back face (z = -0.5)
+         0.5f, -0.5f, -0.5f, 0.0f, 0.0f, // 8
+        -0.5f, -0.5f, -0.5f, 1.0f, 0.0f, // 9
+        -0.5f,  0.5f, -0.5f, 1.0f, 1.0f, // 10
+         0.5f,  0.5f, -0.5f, 0.0f, 1.0f, // 11
+
+        // Left face (x = -0.5)
+        -0.5f, -0.5f, -0.5f, 0.0f, 0.0f, // 12
+        -0.5f, -0.5f,  0.5f, 1.0f, 0.0f, // 13
+        -0.5f,  0.5f,  0.5f, 1.0f, 1.0f, // 14
+        -0.5f,  0.5f, -0.5f, 0.0f, 1.0f, // 15
+
+        // Top face (y = +0.5)
+        -0.5f,  0.5f,  0.5f, 0.0f, 0.0f, // 16
+         0.5f,  0.5f,  0.5f, 1.0f, 0.0f, // 17
+         0.5f,  0.5f, -0.5f, 1.0f, 1.0f, // 18
+        -0.5f,  0.5f, -0.5f, 0.0f, 1.0f, // 19
+
+        // Bottom face (y = -0.5)
+        -0.5f, -0.5f, -0.5f, 0.0f, 0.0f, // 20
+         0.5f, -0.5f, -0.5f, 1.0f, 0.0f, // 21
+         0.5f, -0.5f,  0.5f, 1.0f, 1.0f, // 22
+        -0.5f, -0.5f,  0.5f, 0.0f, 1.0f, // 23
     };
-    unsigned idx[] = { // triangle indices
-        // front
-        0,1,2,  2,3,0,
-        // right
-        1,5,6,  6,2,1,
-        // back
-        5,4,7,  7,6,5,
-        // left
-        4,0,3,  3,7,4,
-        // top
-        3,2,6,  6,7,3,
-        // bottom
-        4,5,1,  1,0,4
+    unsigned idx[] = {
+        // Front face
+        0, 1, 2,  2, 3, 0,
+        // Right face
+        4, 5, 6,  6, 7, 4,
+        // Back face
+        8, 9,10, 10,11, 8,
+        // Left face
+        12,13,14, 14,15,12,
+        // Top face
+        16,17,18, 18,19,16,
+        // Bottom face
+        20,21,22, 22,23,20
     };
     CubeMesh mesh{};
     glGenVertexArrays(1, &mesh.vao);
@@ -72,27 +100,36 @@ CubeMesh createCubeMesh() {
     } \
 } while(0)
 
+
+// GLSL (OpenGL Shading Language) shaders for vertex and fragment
 static const char* kVS = R"(
 #version 330 core
 layout (location = 0) in vec3 aPos;
 layout (location = 1) in vec3 instanceOffset;
+layout (location = 2) in vec2 aUV;
+out vec2 vUV;
+
 uniform mat4 uVP;
 void main() {
     vec3 pos = aPos + instanceOffset;
+    vUV = aUV;
     gl_Position = uVP * vec4(pos, 1.0);
 }
 )";
 
 static const char* kFS = R"(
 #version 330 core
+in vec2 vUV;
+uniform sampler2D uTex;
 out vec4 FragColor;
 void main() {
-    FragColor = vec4(0.5, 0.5, 0.5, 1.0);
+    FragColor = texture(uTex, vUV);
 }
 )";
 
-static const double placeCooldown = 0.1; // seconds
-static const double breakCooldown = 0.1; // seconds
+const double PLACE_COOLDOWN = 0.1; // seconds
+const double BREAK_COOLDOWN = 0.1; // seconds
+const float PLAYER_REACH = 10.0f;
 
 static void glfw_error_callback(int code, const char* desc) {
     fprintf(stderr, "GLFW error %d: %s\n", code, desc);
@@ -106,25 +143,25 @@ static void scroll_callback(GLFWwindow* win, double xoffset, double yoffset) {
     cam->fov -= float(yoffset);
 }
 struct BlockHitInfo {
-    int blockIndex;         // Index in blocks vector
-    glm::vec3 blockPos;     // Position of the block
-    int faceIndex;          // Face index (0=bottom, 1=right, 2=top, 3=left, 4=front, 5=back)
-    glm::vec3 hitPos;       // World position of intersection
-    float distance;         // Distance from ray origin to hit
+    int blockIndex; // Index in blocks vector
+    glm::vec3 blockPos; // Position of the block
+    int faceIndex; // Face index (0=bottom, 1=right, 2=top, 3=left, 4=front, 5=back)
+    glm::vec3 hitPos; // World position of intersection
+    float distance; // Distance from ray origin to hit
 };
 
 static BlockHitInfo target_block_face(const Camera& cam, const std::vector<glm::vec3>& blocks) {
     glm::vec3 rayOrigin = cam.pos;
     glm::vec3 rayDirection = cam.front();
-    float maxDistance = 10.0f;
-    BlockHitInfo bestHit{ -1, glm::vec3(0), -1, glm::vec3(0), maxDistance + 1.0f };
+    BlockHitInfo bestHit{ -1, glm::vec3(0), -1, glm::vec3(0), PLAYER_REACH + 1.0f };
 
-    for (size_t i = 0; i < blocks.size(); ++i) {
-        const glm::vec3& block = blocks[i];
-        glm::vec3 blockMin = block - glm::vec3(0.5f);
-        glm::vec3 blockMax = block + glm::vec3(0.5f);
+    for (size_t i = 0; i < blocks.size(); ++i) { // iterate over every block and check distance
+        const glm::vec3& block = blocks[i]; // current block
+        glm::vec3 blockMin = block - glm::vec3(0.5f); // most negative corner of the block
+        glm::vec3 blockMax = block + glm::vec3(0.5f); // most positive corner of the block
 
-        float tMin = -INFINITY, tMax = INFINITY;
+        float tMin = -INFINITY, tMax = INFINITY; // tMin: the minimum t value of the intersection, tMax: the maximum t value of the intersection
+        // t value: the distance along the ray where it intersects the block's slabs (parameterized line)
 
         // X slab
         if (rayDirection.x != 0.0f) {
@@ -156,7 +193,7 @@ static BlockHitInfo target_block_face(const Camera& cam, const std::vector<glm::
             continue;
         }
 
-        if (tMax < tMin || tMin < 0 || tMin > maxDistance) continue;
+        if (tMax < tMin || tMin < 0 || tMin > PLAYER_REACH) continue;
 
         glm::vec3 intersection = rayOrigin + tMin * rayDirection;
         glm::vec3 offset = intersection - block;
@@ -208,9 +245,6 @@ static GLuint link(GLuint vs, GLuint fs) {
     return prog;
 }
 
-// ---------------------------------------------
-// Input helpers
-// ---------------------------------------------
 static void processKeyboard(GLFWwindow* win, Camera& cam, float dt) {
     glm::vec3 f = cam.front();
     glm::vec3 r = cam.right();
@@ -244,6 +278,19 @@ int main() {
     glfwSetFramebufferSizeCallback(win, framebuffer_size_callback);
     // glfwSetScrollCallback(win, scroll_callback);
 
+    int w,h,n;
+    stbi_set_flip_vertically_on_load(true);
+    unsigned char* data = stbi_load("block.png", &w, &h, &n, 4); // RGBA
+
+    GLuint tex;
+    glGenTextures(1,&tex);
+    glBindTexture(GL_TEXTURE_2D, tex);
+    glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA8, w,h,0,GL_RGBA,GL_UNSIGNED_BYTE,data);
+    glGenerateMipmap(GL_TEXTURE_2D);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    stbi_image_free(data);
+
     glfwSetInputMode(win, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
     GLuint vs = compile(GL_VERTEX_SHADER, kVS);
@@ -253,6 +300,10 @@ int main() {
     glDeleteShader(fs);
     GLint uVP = glGetUniformLocation(prog, "uVP");
 
+    glUseProgram(prog);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, tex);
+    glUniform1i(glGetUniformLocation(prog,"uTex"), 0);
 
     Camera cam;
     glfwSetWindowUserPointer(win, &cam);
@@ -274,10 +325,20 @@ int main() {
     glBufferData(GL_ARRAY_BUFFER, instanceOffsets.size() * sizeof(glm::vec3), instanceOffsets.data(), GL_STATIC_DRAW);
 
     glBindVertexArray(cube.vao);
+    glBindBuffer(GL_ARRAY_BUFFER, cube.vbo); // Bind cube.vbo, set per-vertex attributes 0 & 2
+    glEnableVertexAttribArray(0); // Position attribute (location 0)
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)0);
+    glVertexAttribDivisor(0, 0); // per-vertex
+    glEnableVertexAttribArray(2); // UV attribute (location 2)
+    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(3 * sizeof(float)));
+    glVertexAttribDivisor(2, 0); // per-vertex
+
+    glBindBuffer(GL_ARRAY_BUFFER, instanceVBO); // Bind instanceVBO, set per-instance attribute 1
     glEnableVertexAttribArray(1);
     glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(glm::vec3), (void*)0);
-    glVertexAttribDivisor(1, 1); // Advance per instance
-    glBindVertexArray(0);
+    glVertexAttribDivisor(1, 1); // per-instance
+
+    glBindVertexArray(0); // Unbind VAO
 
     double lastTime = glfwGetTime();
     double lastX = 0.0, lastY = 0.0;
@@ -312,7 +373,7 @@ int main() {
             double dy = lastY - y; // invert y
             lastX = x; lastY = y;
 
-            cam.yaw   += float(dx) * cam.mouseSensitivity;
+            cam.yaw += float(dx) * cam.mouseSensitivity;
             cam.pitch += float(dy) * cam.mouseSensitivity;
             cam.pitch = glm::clamp(cam.pitch, -89.0f, 89.0f);
         }
@@ -324,7 +385,7 @@ int main() {
 
         if (nowLeft && !prevLeft) {
             BlockHitInfo hit = target_block_face(cam, instanceOffsets);
-            if (now - lastBreakTime > breakCooldown && hit.blockIndex != -1) {
+            if (now - lastBreakTime > BREAK_COOLDOWN && hit.blockIndex != -1) {
                 instanceOffsets.erase(instanceOffsets.begin() + hit.blockIndex);
                 needUpload = true;
                 lastBreakTime = now; // reset break cooldown
@@ -336,14 +397,14 @@ int main() {
                 // Calculate spawn position: offset by 1 unit along the hit face normal
                 glm::vec3 faceNormals[] = {
                     glm::vec3(0, -1, 0), // bottom
-                    glm::vec3(1, 0, 0),  // right
-                    glm::vec3(0, 1, 0),  // top
+                    glm::vec3(1, 0, 0), // right
+                    glm::vec3(0, 1, 0), // top
                     glm::vec3(-1, 0, 0), // left
-                    glm::vec3(0, 0, 1),  // front
-                    glm::vec3(0, 0, -1)  // back
+                    glm::vec3(0, 0, 1), // front
+                    glm::vec3(0, 0, -1) // back
                 };
                 glm::vec3 spawnPos = hit.blockPos + faceNormals[hit.faceIndex];
-                if (now - lastPlaceTime > placeCooldown && std::find(instanceOffsets.begin(), instanceOffsets.end(), spawnPos) == instanceOffsets.end()) {
+                if (now - lastPlaceTime > PLACE_COOLDOWN && std::find(instanceOffsets.begin(), instanceOffsets.end(), spawnPos) == instanceOffsets.end()) {
                     instanceOffsets.push_back(spawnPos);
                     needUpload = true;
                     lastPlaceTime = now; // reset place cooldown

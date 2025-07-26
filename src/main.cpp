@@ -130,6 +130,8 @@ void main() {
 const double PLACE_COOLDOWN = 0.1; // seconds
 const double BREAK_COOLDOWN = 0.1; // seconds
 const float PLAYER_REACH = 10.0f;
+const int TERRAIN_WIDTH = 32;
+const int TERRAIN_HEIGHT = 4;
 
 static void glfw_error_callback(int code, const char* desc) {
     fprintf(stderr, "GLFW error %d: %s\n", code, desc);
@@ -309,20 +311,25 @@ int main() {
     glfwSetWindowUserPointer(win, &cam);
 
     CubeMesh cube = createCubeMesh();
-    std::vector<glm::vec3> instanceOffsets = {
-        glm::vec3(0.0f, 0.0f, 0.0f),
-        glm::vec3(2.0f, 0.0f, 0.0f),
-        glm::vec3(0.0f, -2.0f, 0.0f),
-        glm::vec3(1.0f, -2.0f, 0.0f),
-        glm::vec3(2.0f, -2.0f, 0.0f),
-    };
+    std::vector<glm::vec3> terrainBlocks;
+    for (int x = -TERRAIN_WIDTH / 2; x < TERRAIN_WIDTH / 2; ++x) {
+        for (int z = -TERRAIN_WIDTH / 2; z < TERRAIN_WIDTH / 2; ++z) {
+            for (int y = 0; y < TERRAIN_HEIGHT; ++y) {
+                if (y < TERRAIN_HEIGHT - 1 || (rand() % 10) < 4) {
+                    terrainBlocks.push_back(glm::vec3(float(x), float(y), float(z)));
+                }
+            }
+        }
+    }
+
+    
     bool needUpload = true;
     const glm::vec3 kSpawn = glm::vec3(1.0f, -1.0f, 0.0f);
 
     GLuint instanceVBO;
     glGenBuffers(1, &instanceVBO);
     glBindBuffer(GL_ARRAY_BUFFER, instanceVBO);
-    glBufferData(GL_ARRAY_BUFFER, instanceOffsets.size() * sizeof(glm::vec3), instanceOffsets.data(), GL_STATIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, terrainBlocks.size() * sizeof(glm::vec3), terrainBlocks.data(), GL_STATIC_DRAW);
 
     glBindVertexArray(cube.vao);
     glBindBuffer(GL_ARRAY_BUFFER, cube.vbo); // Bind cube.vbo, set per-vertex attributes 0 & 2
@@ -384,15 +391,15 @@ int main() {
         bool nowRight = glfwGetMouseButton(win, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS;
 
         if (nowLeft && !prevLeft) {
-            BlockHitInfo hit = target_block_face(cam, instanceOffsets);
+            BlockHitInfo hit = target_block_face(cam, terrainBlocks);
             if (now - lastBreakTime > BREAK_COOLDOWN && hit.blockIndex != -1) {
-                instanceOffsets.erase(instanceOffsets.begin() + hit.blockIndex);
+                terrainBlocks.erase(terrainBlocks.begin() + hit.blockIndex);
                 needUpload = true;
                 lastBreakTime = now; // reset break cooldown
             }
         }
         if (nowRight && !prevRight) {
-            BlockHitInfo hit = target_block_face(cam, instanceOffsets);
+            BlockHitInfo hit = target_block_face(cam, terrainBlocks);
             if (hit.blockIndex != -1 && hit.faceIndex != -1) {
                 // Calculate spawn position: offset by 1 unit along the hit face normal
                 glm::vec3 faceNormals[] = {
@@ -404,8 +411,8 @@ int main() {
                     glm::vec3(0, 0, -1) // back
                 };
                 glm::vec3 spawnPos = hit.blockPos + faceNormals[hit.faceIndex];
-                if (now - lastPlaceTime > PLACE_COOLDOWN && std::find(instanceOffsets.begin(), instanceOffsets.end(), spawnPos) == instanceOffsets.end()) {
-                    instanceOffsets.push_back(spawnPos);
+                if (now - lastPlaceTime > PLACE_COOLDOWN && std::find(terrainBlocks.begin(), terrainBlocks.end(), spawnPos) == terrainBlocks.end()) {
+                    terrainBlocks.push_back(spawnPos);
                     needUpload = true;
                     lastPlaceTime = now; // reset place cooldown
                 }
@@ -421,15 +428,15 @@ int main() {
         bool nowO = glfwGetKey(win, GLFW_KEY_O) == GLFW_PRESS;
 
         if (nowP && !prevP) {
-            if (std::find(instanceOffsets.begin(), instanceOffsets.end(), kSpawn) == instanceOffsets.end()) {
-                instanceOffsets.push_back(kSpawn);
+            if (std::find(terrainBlocks.begin(), terrainBlocks.end(), kSpawn) == terrainBlocks.end()) {
+                terrainBlocks.push_back(kSpawn);
                 needUpload = true;
             }
         }
         if (nowO && !prevO) {
-            auto it = std::find(instanceOffsets.begin(), instanceOffsets.end(), kSpawn);
-            if (it != instanceOffsets.end()) {
-                instanceOffsets.erase(it);
+            auto it = std::find(terrainBlocks.begin(), terrainBlocks.end(), kSpawn);
+            if (it != terrainBlocks.end()) {
+                terrainBlocks.erase(it);
                 needUpload = true;
             }
         }
@@ -450,14 +457,14 @@ int main() {
 
         if (needUpload) {
             glBindBuffer(GL_ARRAY_BUFFER, instanceVBO);
-            glBufferData(GL_ARRAY_BUFFER, instanceOffsets.size() * sizeof(glm::vec3), instanceOffsets.data(), GL_STATIC_DRAW);
+            glBufferData(GL_ARRAY_BUFFER, terrainBlocks.size() * sizeof(glm::vec3), terrainBlocks.data(), GL_STATIC_DRAW);
             needUpload = false;
         }
 
         glUseProgram(prog);
         glUniformMatrix4fv(uVP, 1, GL_FALSE, glm::value_ptr(vp));
         glBindVertexArray(cube.vao);
-        glDrawElementsInstanced(GL_TRIANGLES, cube.indexCount, GL_UNSIGNED_INT, 0, instanceOffsets.size());
+        glDrawElementsInstanced(GL_TRIANGLES, cube.indexCount, GL_UNSIGNED_INT, 0, terrainBlocks.size());
         glBindVertexArray(0);
 
         glfwSwapBuffers(win);

@@ -107,12 +107,15 @@ static const char* kVS = R"(
 layout (location = 0) in vec3 aPos;
 layout (location = 1) in vec3 instanceOffset;
 layout (location = 2) in vec2 aUV;
+layout (location = 3) in int texIndex;
 out vec2 vUV;
+flat out int vTexIndex;
 
 uniform mat4 uVP;
 void main() {
     vec3 pos = aPos + instanceOffset;
     vUV = aUV;
+    vTexIndex = texIndex;
     gl_Position = uVP * vec4(pos, 1.0);
 }
 )";
@@ -120,10 +123,11 @@ void main() {
 static const char* kFS = R"(
 #version 330 core
 in vec2 vUV;
-uniform sampler2D uTex;
+flat in int vTexIndex;
+uniform sampler2D uTex[2];
 out vec4 FragColor;
 void main() {
-    FragColor = texture(uTex, vUV);
+    FragColor = texture(uTex[vTexIndex], vUV);
 }
 )";
 
@@ -280,18 +284,26 @@ int main() {
     glfwSetFramebufferSizeCallback(win, framebuffer_size_callback);
     // glfwSetScrollCallback(win, scroll_callback);
 
-    int w,h,n;
+    int w1,h1,n1,w2,h2,n2;
     stbi_set_flip_vertically_on_load(true);
-    unsigned char* data = stbi_load("block.png", &w, &h, &n, 4); // RGBA
+    unsigned char* data1 = stbi_load("assets/tile.png", &w1, &h1, &n1, 4); // RGBA
+    unsigned char* data2 = stbi_load("assets/turf.png", &w2, &h2, &n2, 4); // RGBA
 
-    GLuint tex;
-    glGenTextures(1,&tex);
-    glBindTexture(GL_TEXTURE_2D, tex);
-    glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA8, w,h,0,GL_RGBA,GL_UNSIGNED_BYTE,data);
+    GLuint tex[2];
+    glGenTextures(2, tex);
+    glBindTexture(GL_TEXTURE_2D, tex[0]);
+    glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA8, w1,h1,0,GL_RGBA,GL_UNSIGNED_BYTE,data1);
     glGenerateMipmap(GL_TEXTURE_2D);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    stbi_image_free(data);
+    stbi_image_free(data1);
+
+    glBindTexture(GL_TEXTURE_2D, tex[1]);
+    glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA8, w2,h2,0,GL_RGBA,GL_UNSIGNED_BYTE,data2);
+    glGenerateMipmap(GL_TEXTURE_2D);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    stbi_image_free(data2);
 
     glfwSetInputMode(win, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
@@ -303,33 +315,39 @@ int main() {
     GLint uVP = glGetUniformLocation(prog, "uVP");
 
     glUseProgram(prog);
+    glUniform1iv(glGetUniformLocation(prog, "uTex"), 2, (int[]){0,1});
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, tex);
-    glUniform1i(glGetUniformLocation(prog,"uTex"), 0);
+    glBindTexture(GL_TEXTURE_2D, tex[0]);
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, tex[1]);
 
     Camera cam;
     glfwSetWindowUserPointer(win, &cam);
 
     CubeMesh cube = createCubeMesh();
-    std::vector<glm::vec3> terrainBlocks;
+    struct BlockInstance {
+        glm::vec3 pos;
+        int texIndex;
+    };
+    std::vector<BlockInstance> terrainBlocks;
     for (int x = -TERRAIN_WIDTH / 2; x < TERRAIN_WIDTH / 2; ++x) {
         for (int z = -TERRAIN_WIDTH / 2; z < TERRAIN_WIDTH / 2; ++z) {
             for (int y = 0; y < TERRAIN_HEIGHT; ++y) {
+                int texIdx = (y >= TERRAIN_HEIGHT - 2) ? 1 : 0; // turf on top layer, tile below
                 if (y < TERRAIN_HEIGHT - 1 || (rand() % 10) < 4) {
-                    terrainBlocks.push_back(glm::vec3(float(x), float(y), float(z)));
+                    terrainBlocks.push_back({glm::vec3(float(x), float(y), float(z)), texIdx});
                 }
             }
         }
     }
 
-    
     bool needUpload = true;
     const glm::vec3 kSpawn = glm::vec3(1.0f, -1.0f, 0.0f);
 
     GLuint instanceVBO;
     glGenBuffers(1, &instanceVBO);
     glBindBuffer(GL_ARRAY_BUFFER, instanceVBO);
-    glBufferData(GL_ARRAY_BUFFER, terrainBlocks.size() * sizeof(glm::vec3), terrainBlocks.data(), GL_STATIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, terrainBlocks.size() * sizeof(BlockInstance), terrainBlocks.data(), GL_STATIC_DRAW);
 
     glBindVertexArray(cube.vao);
     glBindBuffer(GL_ARRAY_BUFFER, cube.vbo); // Bind cube.vbo, set per-vertex attributes 0 & 2
@@ -340,10 +358,13 @@ int main() {
     glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(3 * sizeof(float)));
     glVertexAttribDivisor(2, 0); // per-vertex
 
-    glBindBuffer(GL_ARRAY_BUFFER, instanceVBO); // Bind instanceVBO, set per-instance attribute 1
+    glBindBuffer(GL_ARRAY_BUFFER, instanceVBO); // Bind instanceVBO, set per-instance attributes 1 & 3
     glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(glm::vec3), (void*)0);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(BlockInstance), (void*)0);
     glVertexAttribDivisor(1, 1); // per-instance
+    glEnableVertexAttribArray(3);
+    glVertexAttribIPointer(3, 1, GL_INT, sizeof(BlockInstance), (void*)offsetof(BlockInstance, texIndex));
+    glVertexAttribDivisor(3, 1); // per-instance
 
     glBindVertexArray(0); // Unbind VAO
 
@@ -391,7 +412,9 @@ int main() {
         bool nowRight = glfwGetMouseButton(win, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS;
 
         if (nowLeft && !prevLeft) {
-            BlockHitInfo hit = target_block_face(cam, terrainBlocks);
+            std::vector<glm::vec3> blockPositions;
+            for (const auto& b : terrainBlocks) blockPositions.push_back(b.pos);
+            BlockHitInfo hit = target_block_face(cam, blockPositions);
             if (now - lastBreakTime > BREAK_COOLDOWN && hit.blockIndex != -1) {
                 terrainBlocks.erase(terrainBlocks.begin() + hit.blockIndex);
                 needUpload = true;
@@ -399,7 +422,9 @@ int main() {
             }
         }
         if (nowRight && !prevRight) {
-            BlockHitInfo hit = target_block_face(cam, terrainBlocks);
+            std::vector<glm::vec3> blockPositions;
+            for (const auto& b : terrainBlocks) blockPositions.push_back(b.pos);
+            BlockHitInfo hit = target_block_face(cam, blockPositions);
             if (hit.blockIndex != -1 && hit.faceIndex != -1) {
                 // Calculate spawn position: offset by 1 unit along the hit face normal
                 glm::vec3 faceNormals[] = {
@@ -411,8 +436,12 @@ int main() {
                     glm::vec3(0, 0, -1) // back
                 };
                 glm::vec3 spawnPos = hit.blockPos + faceNormals[hit.faceIndex];
-                if (now - lastPlaceTime > PLACE_COOLDOWN && std::find(terrainBlocks.begin(), terrainBlocks.end(), spawnPos) == terrainBlocks.end()) {
-                    terrainBlocks.push_back(spawnPos);
+                bool exists = false;
+                for (const auto& b : terrainBlocks) {
+                    if (b.pos == spawnPos) { exists = true; break; }
+                }
+                if (now - lastPlaceTime > PLACE_COOLDOWN && !exists) {
+                    terrainBlocks.push_back({spawnPos, 0}); // tile.png for placed blocks
                     needUpload = true;
                     lastPlaceTime = now; // reset place cooldown
                 }
@@ -428,13 +457,20 @@ int main() {
         bool nowO = glfwGetKey(win, GLFW_KEY_O) == GLFW_PRESS;
 
         if (nowP && !prevP) {
-            if (std::find(terrainBlocks.begin(), terrainBlocks.end(), kSpawn) == terrainBlocks.end()) {
-                terrainBlocks.push_back(kSpawn);
+            bool exists = false;
+            for (const auto& b : terrainBlocks) {
+                if (b.pos == kSpawn) { exists = true; break; }
+            }
+            if (!exists) {
+                terrainBlocks.push_back({kSpawn, 0}); // tile.png for placed blocks
                 needUpload = true;
             }
         }
         if (nowO && !prevO) {
-            auto it = std::find(terrainBlocks.begin(), terrainBlocks.end(), kSpawn);
+            auto it = terrainBlocks.begin();
+            for (; it != terrainBlocks.end(); ++it) {
+                if (it->pos == kSpawn) break;
+            }
             if (it != terrainBlocks.end()) {
                 terrainBlocks.erase(it);
                 needUpload = true;
@@ -457,7 +493,7 @@ int main() {
 
         if (needUpload) {
             glBindBuffer(GL_ARRAY_BUFFER, instanceVBO);
-            glBufferData(GL_ARRAY_BUFFER, terrainBlocks.size() * sizeof(glm::vec3), terrainBlocks.data(), GL_STATIC_DRAW);
+            glBufferData(GL_ARRAY_BUFFER, terrainBlocks.size() * sizeof(BlockInstance), terrainBlocks.data(), GL_STATIC_DRAW);
             needUpload = false;
         }
 

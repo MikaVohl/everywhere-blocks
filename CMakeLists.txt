@@ -10,6 +10,7 @@ find_package(glm REQUIRED) # we’ll use it soon; harmless if unused right now
 add_executable(tinycraft
     src/main.cpp
     src/camera.cpp
+    src/gfx/Shader.cpp
 )
 
 # Stop GLFW from including legacy GL headers & silence Apple’s deprecation warning

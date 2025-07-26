@@ -5,7 +5,6 @@
 #include <vector>
 
 #define GLFW_INCLUDE_NONE
-#include <OpenGL/gl3.h>
 #include <GLFW/glfw3.h>
 
 #include <glm/glm.hpp>
@@ -16,6 +15,7 @@
 
 
 #include "camera.h"
+#include "gfx/Shader.h"
 
 struct CubeMesh {
     GLuint vao; // vao stands for "Vertex Array Object". It stores references to vertex attributes and buffers.
@@ -219,38 +219,6 @@ static BlockHitInfo target_block_face(const Camera& cam, const std::vector<glm::
     return bestHit;
 }
 
-static GLuint compile(GLenum type, const char* src) {
-    GLuint id = glCreateShader(type);
-    glShaderSource(id, 1, &src, nullptr);
-    glCompileShader(id);
-    GLint ok = 0;
-    glGetShaderiv(id, GL_COMPILE_STATUS, &ok);
-    if (!ok) {
-        GLint len = 0; glGetShaderiv(id, GL_INFO_LOG_LENGTH, &len);
-        std::string logStr(len, '\0');
-        glGetShaderInfoLog(id, len, nullptr, logStr.data());
-        fprintf(stderr, "Shader compile error: %s\n", logStr.c_str());
-        exit(1);
-    }
-    return id;
-}
-static GLuint link(GLuint vs, GLuint fs) {
-    GLuint prog = glCreateProgram();
-    glAttachShader(prog, vs);
-    glAttachShader(prog, fs);
-    glLinkProgram(prog);
-    GLint ok = 0;
-    glGetProgramiv(prog, GL_LINK_STATUS, &ok);
-    if (!ok) {
-        GLint len = 0; glGetProgramiv(prog, GL_INFO_LOG_LENGTH, &len);
-        std::string logStr(len, '\0');
-        glGetProgramInfoLog(prog, len, nullptr, logStr.data());
-        fprintf(stderr, "Program link error: %s\n", logStr.c_str());
-        exit(1);
-    }
-    return prog;
-}
-
 static void processKeyboard(GLFWwindow* win, Camera& cam, float dt) {
     glm::vec3 f = cam.front();
     glm::vec3 r = cam.right();
@@ -307,11 +275,8 @@ int main() {
 
     glfwSetInputMode(win, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
-    GLuint vs = compile(GL_VERTEX_SHADER, kVS);
-    GLuint fs = compile(GL_FRAGMENT_SHADER, kFS);
-    GLuint prog = link(vs, fs);
-    glDeleteShader(vs);
-    glDeleteShader(fs);
+    ShaderProgram shader(kVS, kFS);
+    GLuint prog = shader.id();
     GLint uVP = glGetUniformLocation(prog, "uVP");
 
     glUseProgram(prog);

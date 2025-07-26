@@ -91,6 +91,9 @@ void main() {
 }
 )";
 
+static const double placeCooldown = 0.1; // seconds
+static const double breakCooldown = 0.1; // seconds
+
 static void glfw_error_callback(int code, const char* desc) {
     fprintf(stderr, "GLFW error %d: %s\n", code, desc);
 }
@@ -101,6 +104,76 @@ static void scroll_callback(GLFWwindow* win, double xoffset, double yoffset) {
     // change camera FOV
     Camera* cam = static_cast<Camera*>(glfwGetWindowUserPointer(win));
     cam->fov -= float(yoffset);
+}
+struct BlockHitInfo {
+    int blockIndex;         // Index in blocks vector
+    glm::vec3 blockPos;     // Position of the block
+    int faceIndex;          // Face index (0=bottom, 1=right, 2=top, 3=left, 4=front, 5=back)
+    glm::vec3 hitPos;       // World position of intersection
+    float distance;         // Distance from ray origin to hit
+};
+
+static BlockHitInfo target_block_face(const Camera& cam, const std::vector<glm::vec3>& blocks) {
+    glm::vec3 rayOrigin = cam.pos;
+    glm::vec3 rayDirection = cam.front();
+    float maxDistance = 10.0f;
+    BlockHitInfo bestHit{ -1, glm::vec3(0), -1, glm::vec3(0), maxDistance + 1.0f };
+
+    for (size_t i = 0; i < blocks.size(); ++i) {
+        const glm::vec3& block = blocks[i];
+        glm::vec3 blockMin = block - glm::vec3(0.5f);
+        glm::vec3 blockMax = block + glm::vec3(0.5f);
+
+        float tMin = -INFINITY, tMax = INFINITY;
+
+        // X slab
+        if (rayDirection.x != 0.0f) {
+            float tx1 = (blockMin.x - rayOrigin.x) / rayDirection.x;
+            float tx2 = (blockMax.x - rayOrigin.x) / rayDirection.x;
+            tMin = std::max(tMin, std::min(tx1, tx2));
+            tMax = std::min(tMax, std::max(tx1, tx2));
+        } else if (rayOrigin.x < blockMin.x || rayOrigin.x > blockMax.x) {
+            continue;
+        }
+
+        // Y slab
+        if (rayDirection.y != 0.0f) {
+            float ty1 = (blockMin.y - rayOrigin.y) / rayDirection.y;
+            float ty2 = (blockMax.y - rayOrigin.y) / rayDirection.y;
+            tMin = std::max(tMin, std::min(ty1, ty2));
+            tMax = std::min(tMax, std::max(ty1, ty2));
+        } else if (rayOrigin.y < blockMin.y || rayOrigin.y > blockMax.y) {
+            continue;
+        }
+
+        // Z slab
+        if (rayDirection.z != 0.0f) {
+            float tz1 = (blockMin.z - rayOrigin.z) / rayDirection.z;
+            float tz2 = (blockMax.z - rayOrigin.z) / rayDirection.z;
+            tMin = std::max(tMin, std::min(tz1, tz2));
+            tMax = std::min(tMax, std::max(tz1, tz2));
+        } else if (rayOrigin.z < blockMin.z || rayOrigin.z > blockMax.z) {
+            continue;
+        }
+
+        if (tMax < tMin || tMin < 0 || tMin > maxDistance) continue;
+
+        glm::vec3 intersection = rayOrigin + tMin * rayDirection;
+        glm::vec3 offset = intersection - block;
+        int face = -1;
+        if (std::abs(offset.x) > std::abs(offset.y) && std::abs(offset.x) > std::abs(offset.z)) {
+            face = (offset.x > 0) ? 1 : 3; // right or left
+        } else if (std::abs(offset.y) > std::abs(offset.x) && std::abs(offset.y) > std::abs(offset.z)) {
+            face = (offset.y > 0) ? 2 : 0; // top or bottom
+        } else {
+            face = (offset.z > 0) ? 4 : 5; // front or back
+        }
+
+        if (tMin < bestHit.distance) {
+            bestHit = { int(i), block, face, intersection, tMin };
+        }
+    }
+    return bestHit;
 }
 
 static GLuint compile(GLenum type, const char* src) {
@@ -209,7 +282,8 @@ int main() {
     double lastTime = glfwGetTime();
     double lastX = 0.0, lastY = 0.0;
     bool firstMouse = true;
-    // bool first = true;
+    double lastPlaceTime = 0.0;
+    double lastBreakTime = 0.0;
 
     while (!glfwWindowShouldClose(win)) {
         double now = glfwGetTime();
@@ -242,6 +316,42 @@ int main() {
             cam.pitch += float(dy) * cam.mouseSensitivity;
             cam.pitch = glm::clamp(cam.pitch, -89.0f, 89.0f);
         }
+
+        // on mouse left click, check for block under crosshair and remove it
+        static bool prevLeft = false, prevRight = false;
+        bool nowLeft = glfwGetMouseButton(win, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
+        bool nowRight = glfwGetMouseButton(win, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS;
+
+        if (nowLeft && !prevLeft) {
+            BlockHitInfo hit = target_block_face(cam, instanceOffsets);
+            if (now - lastBreakTime > breakCooldown && hit.blockIndex != -1) {
+                instanceOffsets.erase(instanceOffsets.begin() + hit.blockIndex);
+                needUpload = true;
+                lastBreakTime = now; // reset break cooldown
+            }
+        }
+        if (nowRight && !prevRight) {
+            BlockHitInfo hit = target_block_face(cam, instanceOffsets);
+            if (hit.blockIndex != -1 && hit.faceIndex != -1) {
+                // Calculate spawn position: offset by 1 unit along the hit face normal
+                glm::vec3 faceNormals[] = {
+                    glm::vec3(0, -1, 0), // bottom
+                    glm::vec3(1, 0, 0),  // right
+                    glm::vec3(0, 1, 0),  // top
+                    glm::vec3(-1, 0, 0), // left
+                    glm::vec3(0, 0, 1),  // front
+                    glm::vec3(0, 0, -1)  // back
+                };
+                glm::vec3 spawnPos = hit.blockPos + faceNormals[hit.faceIndex];
+                if (now - lastPlaceTime > placeCooldown && std::find(instanceOffsets.begin(), instanceOffsets.end(), spawnPos) == instanceOffsets.end()) {
+                    instanceOffsets.push_back(spawnPos);
+                    needUpload = true;
+                    lastPlaceTime = now; // reset place cooldown
+                }
+            }
+        }
+        prevLeft = nowLeft;
+        prevRight = nowRight;
 
         processKeyboard(win, cam, dt);
         

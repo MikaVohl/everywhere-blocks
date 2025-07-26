@@ -15,14 +15,14 @@
 #include "camera.h"
 
 struct CubeMesh {
-    GLuint vao;
-    GLuint vbo;
-    GLuint ebo;
+    GLuint vao; // vao stands for "Vertex Array Object". It stores references to vertex attributes and buffers.
+    GLuint vbo; // vbo stands for "Vertex Buffer Object". It stores vertex data like positions, normals, texture coordinates, etc. Array of positions (8 sets of xyz, 8 sets of normals, ...))
+    GLuint ebo; // ebo stands for "Element Buffer Object". It stores indices that define how vertices are connected to form triangles.
     GLsizei indexCount;
 };
 
 CubeMesh createCubeMesh() {
-    float verts[] = {
+    float verts[] = { // relative to the center of the cube (0,0,0)
         // front face
         -0.5f,-0.5f, 0.5f,
          0.5f,-0.5f, 0.5f,
@@ -34,7 +34,7 @@ CubeMesh createCubeMesh() {
          0.5f, 0.5f,-0.5f,
         -0.5f, 0.5f,-0.5f,
     };
-    unsigned idx[] = {
+    unsigned idx[] = { // triangle indices
         // front
         0,1,2,  2,3,0,
         // right
@@ -75,9 +75,11 @@ CubeMesh createCubeMesh() {
 static const char* kVS = R"(
 #version 330 core
 layout (location = 0) in vec3 aPos;
-uniform mat4 uMVP;
+layout (location = 1) in vec3 instanceOffset;
+uniform mat4 uVP;
 void main() {
-    gl_Position = uMVP * vec4(aPos, 1.0);
+    vec3 pos = aPos + instanceOffset;
+    gl_Position = uVP * vec4(pos, 1.0);
 }
 )";
 
@@ -85,7 +87,7 @@ static const char* kFS = R"(
 #version 330 core
 out vec4 FragColor;
 void main() {
-    FragColor = vec4(0.8, 0.2, 0.3, 1.0);
+    FragColor = vec4(0.5, 0.5, 0.5, 1.0);
 }
 )";
 
@@ -176,17 +178,33 @@ int main() {
     GLuint prog = link(vs, fs);
     glDeleteShader(vs);
     glDeleteShader(fs);
-    GLint uMVP = glGetUniformLocation(prog, "uMVP");
+    GLint uVP = glGetUniformLocation(prog, "uVP");
 
 
     Camera cam;
     glfwSetWindowUserPointer(win, &cam);
 
     CubeMesh cube = createCubeMesh();
-    std::vector<glm::mat4> modelMatrices = {
-        glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 0.0f)),
-        glm::translate(glm::mat4(1.0f), glm::vec3(2.0f, 0.0f, 0.0f))
+    std::vector<glm::vec3> instanceOffsets = {
+        glm::vec3(0.0f, 0.0f, 0.0f),
+        glm::vec3(2.0f, 0.0f, 0.0f),
+        glm::vec3(0.0f, -2.0f, 0.0f),
+        glm::vec3(1.0f, -2.0f, 0.0f),
+        glm::vec3(2.0f, -2.0f, 0.0f),
     };
+    bool needUpload = true;
+    const glm::vec3 kSpawn = glm::vec3(1.0f, -1.0f, 0.0f);
+
+    GLuint instanceVBO;
+    glGenBuffers(1, &instanceVBO);
+    glBindBuffer(GL_ARRAY_BUFFER, instanceVBO);
+    glBufferData(GL_ARRAY_BUFFER, instanceOffsets.size() * sizeof(glm::vec3), instanceOffsets.data(), GL_STATIC_DRAW);
+
+    glBindVertexArray(cube.vao);
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(glm::vec3), (void*)0);
+    glVertexAttribDivisor(1, 1); // Advance per instance
+    glBindVertexArray(0);
 
     double lastTime = glfwGetTime();
     double lastX = 0.0, lastY = 0.0;
@@ -226,25 +244,49 @@ int main() {
         }
 
         processKeyboard(win, cam, dt);
+        
+        static bool prevP = false, prevO = false;
+        bool nowP = glfwGetKey(win, GLFW_KEY_P) == GLFW_PRESS;
+        bool nowO = glfwGetKey(win, GLFW_KEY_O) == GLFW_PRESS;
+
+        if (nowP && !prevP) {
+            if (std::find(instanceOffsets.begin(), instanceOffsets.end(), kSpawn) == instanceOffsets.end()) {
+                instanceOffsets.push_back(kSpawn);
+                needUpload = true;
+            }
+        }
+        if (nowO && !prevO) {
+            auto it = std::find(instanceOffsets.begin(), instanceOffsets.end(), kSpawn);
+            if (it != instanceOffsets.end()) {
+                instanceOffsets.erase(it);
+                needUpload = true;
+            }
+        }
+        prevP = nowP;
+        prevO = nowO;
 
         int w, h; glfwGetFramebufferSize(win, &w, &h);
         float aspect = (h>0) ? (float)w / (float)h : 1.0f;
 
         glm::mat4 v = cam.view();
         glm::mat4 p = cam.proj(aspect);
+        glm::mat4 vp = p * v;
 
         glEnable(GL_DEPTH_TEST);
         glViewport(0,0,w,h);
         glClearColor(0.1f, 0.12f, 0.16f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        glUseProgram(prog);
-        glBindVertexArray(cube.vao);
-        for (const auto& m : modelMatrices) {
-            glm::mat4 mvp = p * v * m;
-            glUniformMatrix4fv(uMVP, 1, GL_FALSE, glm::value_ptr(mvp));
-            glDrawElements(GL_TRIANGLES, cube.indexCount, GL_UNSIGNED_INT, 0);
+        if (needUpload) {
+            glBindBuffer(GL_ARRAY_BUFFER, instanceVBO);
+            glBufferData(GL_ARRAY_BUFFER, instanceOffsets.size() * sizeof(glm::vec3), instanceOffsets.data(), GL_STATIC_DRAW);
+            needUpload = false;
         }
+
+        glUseProgram(prog);
+        glUniformMatrix4fv(uVP, 1, GL_FALSE, glm::value_ptr(vp));
+        glBindVertexArray(cube.vao);
+        glDrawElementsInstanced(GL_TRIANGLES, cube.indexCount, GL_UNSIGNED_INT, 0, instanceOffsets.size());
         glBindVertexArray(0);
 
         glfwSwapBuffers(win);
@@ -252,6 +294,7 @@ int main() {
 
     glDeleteBuffers(1, &cube.ebo);
     glDeleteBuffers(1, &cube.vbo);
+    glDeleteBuffers(1, &instanceVBO);
     glDeleteVertexArrays(1, &cube.vao);
     glDeleteProgram(prog);
 

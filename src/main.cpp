@@ -2,6 +2,7 @@
 #include <cstdlib>
 #include <string>
 #include <cmath>
+#include <vector>
 
 #define GLFW_INCLUDE_NONE
 #include <OpenGL/gl3.h>
@@ -9,7 +10,6 @@
 
 #include <glm/glm.hpp>
 #include <glm/gtc/type_ptr.hpp>
-#include <vector>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "../external/stb_image.h"
@@ -487,6 +487,8 @@ int main() {
         glm::mat4 vp = p * v;
 
         glEnable(GL_DEPTH_TEST);
+        glEnable(GL_CULL_FACE);  
+
         glViewport(0,0,w,h);
         glClearColor(0.1f, 0.12f, 0.16f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);

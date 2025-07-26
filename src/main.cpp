@@ -15,6 +15,7 @@
 #include "gfx/Shader.h"
 #include "gfx/Texture.h"
 #include "gfx/Mesh.h"
+#include "gfx/InstanceBuffer.h"
 
 #define GL_CALL(x) do { \
     x; \
@@ -199,10 +200,6 @@ int main() {
     glfwSetWindowUserPointer(win, &cam);
 
     CubeMesh cube;
-    struct BlockInstance {
-        glm::vec3 pos;
-        int texIndex;
-    };
     std::vector<BlockInstance> terrainBlocks;
     for (int x = -TERRAIN_WIDTH / 2; x < TERRAIN_WIDTH / 2; ++x) {
         for (int z = -TERRAIN_WIDTH / 2; z < TERRAIN_WIDTH / 2; ++z) {
@@ -218,10 +215,8 @@ int main() {
     bool needUpload = true;
     const glm::vec3 kSpawn = glm::vec3(1.0f, -1.0f, 0.0f);
 
-    GLuint instanceVBO;
-    glGenBuffers(1, &instanceVBO);
-    glBindBuffer(GL_ARRAY_BUFFER, instanceVBO);
-    glBufferData(GL_ARRAY_BUFFER, terrainBlocks.size() * sizeof(BlockInstance), terrainBlocks.data(), GL_STATIC_DRAW);
+    InstanceVBO instanceVBO;
+    instanceVBO.update(terrainBlocks.data(), terrainBlocks.size());
 
     glBindVertexArray(cube.getVAO());
     glBindBuffer(GL_ARRAY_BUFFER, cube.getVBO()); // Bind cube.vbo, set per-vertex attributes 0 & 2
@@ -232,7 +227,7 @@ int main() {
     glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(3 * sizeof(float)));
     glVertexAttribDivisor(2, 0); // per-vertex
 
-    glBindBuffer(GL_ARRAY_BUFFER, instanceVBO); // Bind instanceVBO, set per-instance attributes 1 & 3
+    instanceVBO.bind(); // Bind instanceVBO, set per-instance attributes 1 & 3
     glEnableVertexAttribArray(1);
     glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(BlockInstance), (void*)0);
     glVertexAttribDivisor(1, 1); // per-instance
@@ -287,7 +282,7 @@ int main() {
 
         if (nowLeft && !prevLeft) {
             std::vector<glm::vec3> blockPositions;
-            for (const auto& b : terrainBlocks) blockPositions.push_back(b.pos);
+            for (const auto& b : terrainBlocks) blockPositions.push_back(b.offset);
             BlockHitInfo hit = target_block_face(cam, blockPositions);
             if (now - lastBreakTime > BREAK_COOLDOWN && hit.blockIndex != -1) {
                 terrainBlocks.erase(terrainBlocks.begin() + hit.blockIndex);
@@ -297,7 +292,7 @@ int main() {
         }
         if (nowRight && !prevRight) {
             std::vector<glm::vec3> blockPositions;
-            for (const auto& b : terrainBlocks) blockPositions.push_back(b.pos);
+            for (const auto& b : terrainBlocks) blockPositions.push_back(b.offset);
             BlockHitInfo hit = target_block_face(cam, blockPositions);
             if (hit.blockIndex != -1 && hit.faceIndex != -1) {
                 // Calculate spawn position: offset by 1 unit along the hit face normal
@@ -312,7 +307,7 @@ int main() {
                 glm::vec3 spawnPos = hit.blockPos + faceNormals[hit.faceIndex];
                 bool exists = false;
                 for (const auto& b : terrainBlocks) {
-                    if (b.pos == spawnPos) { exists = true; break; }
+                    if (b.offset == spawnPos) { exists = true; break; }
                 }
                 if (now - lastPlaceTime > PLACE_COOLDOWN && !exists) {
                     terrainBlocks.push_back({spawnPos, 0}); // tile.png for placed blocks
@@ -333,7 +328,7 @@ int main() {
         if (nowP && !prevP) {
             bool exists = false;
             for (const auto& b : terrainBlocks) {
-                if (b.pos == kSpawn) { exists = true; break; }
+                if (b.offset == kSpawn) { exists = true; break; }
             }
             if (!exists) {
                 terrainBlocks.push_back({kSpawn, 0}); // tile.png for placed blocks
@@ -343,7 +338,7 @@ int main() {
         if (nowO && !prevO) {
             auto it = terrainBlocks.begin();
             for (; it != terrainBlocks.end(); ++it) {
-                if (it->pos == kSpawn) break;
+                if (it->offset == kSpawn) break;
             }
             if (it != terrainBlocks.end()) {
                 terrainBlocks.erase(it);
@@ -368,8 +363,7 @@ int main() {
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         if (needUpload) {
-            glBindBuffer(GL_ARRAY_BUFFER, instanceVBO);
-            glBufferData(GL_ARRAY_BUFFER, terrainBlocks.size() * sizeof(BlockInstance), terrainBlocks.data(), GL_STATIC_DRAW);
+            instanceVBO.update(terrainBlocks.data(), terrainBlocks.size());
             needUpload = false;
         }
 
@@ -382,7 +376,6 @@ int main() {
         glfwSwapBuffers(win);
     }
 
-    glDeleteBuffers(1, &instanceVBO);
     glDeleteProgram(prog);
 
     glfwDestroyWindow(win);

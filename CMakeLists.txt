@@ -13,6 +13,7 @@ add_executable(tinycraft
     src/gfx/Shader.cpp
     src/gfx/Texture.cpp
     src/gfx/Mesh.cpp
+    src/gfx/InstanceBuffer.cpp
     external/stb_image.cpp
 )
 

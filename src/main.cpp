@@ -11,13 +11,13 @@
 #include <glm/gtc/type_ptr.hpp>
 
 
-#include "camera.h"
-#include "gfx/Shader.h"
-#include "gfx/Texture.h"
-#include "gfx/Mesh.h"
-#include "gfx/InstanceBuffer.h"
-#include "gfx/Renderer.h"
-#include "world/TerrainGen.h"
+#include "camera.hpp"
+#include "gfx/Shader.hpp"
+#include "gfx/Texture.hpp"
+#include "gfx/Mesh.hpp"
+#include "gfx/InstanceBuffer.hpp"
+#include "gfx/Renderer.hpp"
+#include "world/TerrainGen.hpp" 
 
 #define GL_CALL(x) do { \
     x; \

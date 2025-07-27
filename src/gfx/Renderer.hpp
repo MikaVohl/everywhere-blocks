@@ -1,6 +1,6 @@
 #pragma once
-#include "Shader.h"
-#include "Mesh.h"
+#include "Shader.hpp"
+#include "Mesh.hpp"
 #include <glm/glm.hpp>
 
 class Renderer {

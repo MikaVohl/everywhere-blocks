@@ -1,7 +1,7 @@
 #include "../../external/stb_image.h"
 #include <OpenGL/gl3.h>
 #include <string>
-#include "Texture.h"
+#include "Texture.hpp"
 
 bool Texture2D::load(const std::string& path) {
     stbi_set_flip_vertically_on_load(true);

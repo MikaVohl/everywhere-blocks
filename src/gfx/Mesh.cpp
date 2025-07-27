@@ -1,4 +1,4 @@
-#include "Mesh.h"
+#include "Mesh.hpp"
 #include <OpenGL/gl3.h>
 
 CubeMesh::CubeMesh() {

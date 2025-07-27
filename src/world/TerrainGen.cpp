@@ -1,7 +1,6 @@
-#include "TerrainGen.h"
 #include <vector>
 #include <glm/glm.hpp>
-#include "../gfx/InstanceBuffer.h"
+#include "../gfx/InstanceBuffer.hpp"
 
 std::vector<BlockInstance> makeTerrain(int terrainWidth, int terrainHeight) {
     std::vector<BlockInstance> terrainBlocks;

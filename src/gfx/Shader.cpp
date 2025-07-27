@@ -1,4 +1,4 @@
-#include "Shader.h"
+#include "Shader.hpp"
 #include <string>
 #include <stdexcept>
 #include <OpenGL/gl3.h>

@@ -1,4 +1,4 @@
-#include "Renderer.h"
+#include "Renderer.hpp"
 #include <glm/gtc/type_ptr.hpp>
 
 Renderer::Renderer(const char* vertSrc, const char* fragSrc, const CubeMesh& mesh) : shader_(vertSrc, fragSrc), mesh_(mesh)

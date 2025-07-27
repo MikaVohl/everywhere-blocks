@@ -1,5 +1,4 @@
-#pragma once
 #include <vector>
-#include "../gfx/InstanceBuffer.h"
+#include "../gfx/InstanceBuffer.hpp"
 
 std::vector<BlockInstance> makeTerrain(int terrainWidth, int terrainHeight);

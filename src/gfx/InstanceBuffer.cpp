@@ -1,4 +1,4 @@
-#include "InstanceBuffer.h"
+#include "InstanceBuffer.hpp"
 #include <OpenGL/gl3.h>
 
 InstanceVBO::InstanceVBO() {

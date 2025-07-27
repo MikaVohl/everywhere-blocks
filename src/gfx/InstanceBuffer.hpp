@@ -12,7 +12,7 @@ static_assert(sizeof(BlockInstance) == 16, "BlockInstance must stay tightly pack
 
 class InstanceVBO {
 public:
-    InstanceVBO();
+    void init();
     ~InstanceVBO();
 
     void bind() const;

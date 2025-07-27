@@ -1,7 +1,7 @@
 #include "InstanceBuffer.hpp"
 #include <OpenGL/gl3.h>
 
-InstanceVBO::InstanceVBO() {
+void InstanceVBO::init() {
     glGenBuffers(1, &vbo_);
 }
 InstanceVBO::~InstanceVBO() {

@@ -15,6 +15,7 @@ public:
     ShaderProgram& shader() { return shader_; }
 
     void buildInstanceBuffer(const std::vector<Block>& blocks, InstanceVBO& instanceVBO);
+    void setupAttributes(const CubeMesh& cube, const InstanceVBO& inst);
 
 private:
     ShaderProgram shader_;

@@ -27,3 +27,26 @@ void Renderer::buildInstanceBuffer(const std::vector<Block>& blocks, InstanceVBO
     }
     instanceVBO.update(instances.data(), instances.size());
 }
+
+void Renderer::setupAttributes(const CubeMesh& cube, const InstanceVBO& inst)
+{
+    glBindVertexArray(cube.getVAO());
+
+    glBindBuffer(GL_ARRAY_BUFFER, cube.getVBO());
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)0);
+
+    glEnableVertexAttribArray(2);
+    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(3 * sizeof(float)));
+
+    glBindBuffer(GL_ARRAY_BUFFER, inst.id());
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(BlockInstance), (void*)0);
+    glVertexAttribDivisor(1, 1);
+
+    glEnableVertexAttribArray(3);
+    glVertexAttribIPointer(3, 1, GL_INT, sizeof(BlockInstance), (void*)offsetof(BlockInstance, texIndex));
+    glVertexAttribDivisor(3, 1);
+
+    glBindVertexArray(0);
+}

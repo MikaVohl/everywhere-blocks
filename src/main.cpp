@@ -17,6 +17,7 @@
 #include "gfx/Mesh.h"
 #include "gfx/InstanceBuffer.h"
 #include "gfx/Renderer.h"
+#include "world/TerrainGen.h"
 
 #define GL_CALL(x) do { \
     x; \
@@ -197,17 +198,7 @@ int main() {
     Camera cam;
     glfwSetWindowUserPointer(win, &cam);
 
-    std::vector<BlockInstance> terrainBlocks;
-    for (int x = -TERRAIN_WIDTH / 2; x < TERRAIN_WIDTH / 2; ++x) {
-        for (int z = -TERRAIN_WIDTH / 2; z < TERRAIN_WIDTH / 2; ++z) {
-            for (int y = 0; y < TERRAIN_HEIGHT; ++y) {
-                int texIdx = (y >= TERRAIN_HEIGHT - 2) ? 1 : 0; // turf on top layer, tile below
-                if (y < TERRAIN_HEIGHT - 1 || (rand() % 10) < 4) {
-                    terrainBlocks.push_back({glm::vec3(float(x), float(y), float(z)), texIdx});
-                }
-            }
-        }
-    }
+    std::vector<BlockInstance> terrainBlocks = makeTerrain(TERRAIN_WIDTH, TERRAIN_HEIGHT);
 
     bool needUpload = true;
     const glm::vec3 kSpawn = glm::vec3(1.0f, -1.0f, 0.0f);
@@ -368,7 +359,7 @@ int main() {
 
         glfwSwapBuffers(win);
     }
-    
+
 
     glfwDestroyWindow(win);
     glfwTerminate();

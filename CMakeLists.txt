@@ -15,6 +15,7 @@ add_executable(tinycraft
     src/gfx/Mesh.cpp
     src/gfx/InstanceBuffer.cpp
     src/gfx/Renderer.cpp
+    src/world/TerrainGen.cpp
     external/stb_image.cpp
 )
 

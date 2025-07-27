@@ -3,8 +3,8 @@
 #include <glm/glm.hpp>
 #include <cstddef> // offsetof
 
-struct BlockInstance {
-    glm::vec3 offset; // location 1
+struct BlockInstance { // Intended for GPU instancing
+    glm::vec3 pos; // location 1
     int texIndex; // location 3
 };
 

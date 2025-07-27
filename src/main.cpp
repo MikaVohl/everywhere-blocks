@@ -17,7 +17,9 @@
 #include "gfx/Mesh.hpp"
 #include "gfx/InstanceBuffer.hpp"
 #include "gfx/Renderer.hpp"
-#include "world/TerrainGen.hpp" 
+#include "world/Block.hpp"
+#include "world/TerrainGen.hpp"
+#include "world/World.hpp"
 
 #define GL_CALL(x) do { \
     x; \
@@ -75,76 +77,6 @@ static void scroll_callback(GLFWwindow* win, double xoffset, double yoffset) {
     Camera* cam = static_cast<Camera*>(glfwGetWindowUserPointer(win));
     cam->fov -= float(yoffset);
 }
-struct BlockHitInfo {
-    int blockIndex; // Index in blocks vector
-    glm::vec3 blockPos; // Position of the block
-    int faceIndex; // Face index (0=bottom, 1=right, 2=top, 3=left, 4=front, 5=back)
-    glm::vec3 hitPos; // World position of intersection
-    float distance; // Distance from ray origin to hit
-};
-
-static BlockHitInfo target_block_face(const Camera& cam, const std::vector<glm::vec3>& blocks) {
-    glm::vec3 rayOrigin = cam.pos;
-    glm::vec3 rayDirection = cam.front();
-    BlockHitInfo bestHit{ -1, glm::vec3(0), -1, glm::vec3(0), PLAYER_REACH + 1.0f };
-
-    for (size_t i = 0; i < blocks.size(); ++i) { // iterate over every block and check distance
-        const glm::vec3& block = blocks[i]; // current block
-        glm::vec3 blockMin = block - glm::vec3(0.5f); // most negative corner of the block
-        glm::vec3 blockMax = block + glm::vec3(0.5f); // most positive corner of the block
-
-        float tMin = -INFINITY, tMax = INFINITY; // tMin: the minimum t value of the intersection, tMax: the maximum t value of the intersection
-        // t value: the distance along the ray where it intersects the block's slabs (parameterized line)
-
-        // X slab
-        if (rayDirection.x != 0.0f) {
-            float tx1 = (blockMin.x - rayOrigin.x) / rayDirection.x;
-            float tx2 = (blockMax.x - rayOrigin.x) / rayDirection.x;
-            tMin = std::max(tMin, std::min(tx1, tx2));
-            tMax = std::min(tMax, std::max(tx1, tx2));
-        } else if (rayOrigin.x < blockMin.x || rayOrigin.x > blockMax.x) {
-            continue;
-        }
-
-        // Y slab
-        if (rayDirection.y != 0.0f) {
-            float ty1 = (blockMin.y - rayOrigin.y) / rayDirection.y;
-            float ty2 = (blockMax.y - rayOrigin.y) / rayDirection.y;
-            tMin = std::max(tMin, std::min(ty1, ty2));
-            tMax = std::min(tMax, std::max(ty1, ty2));
-        } else if (rayOrigin.y < blockMin.y || rayOrigin.y > blockMax.y) {
-            continue;
-        }
-
-        // Z slab
-        if (rayDirection.z != 0.0f) {
-            float tz1 = (blockMin.z - rayOrigin.z) / rayDirection.z;
-            float tz2 = (blockMax.z - rayOrigin.z) / rayDirection.z;
-            tMin = std::max(tMin, std::min(tz1, tz2));
-            tMax = std::min(tMax, std::max(tz1, tz2));
-        } else if (rayOrigin.z < blockMin.z || rayOrigin.z > blockMax.z) {
-            continue;
-        }
-
-        if (tMax < tMin || tMin < 0 || tMin > PLAYER_REACH) continue;
-
-        glm::vec3 intersection = rayOrigin + tMin * rayDirection;
-        glm::vec3 offset = intersection - block;
-        int face = -1;
-        if (std::abs(offset.x) > std::abs(offset.y) && std::abs(offset.x) > std::abs(offset.z)) {
-            face = (offset.x > 0) ? 1 : 3; // right or left
-        } else if (std::abs(offset.y) > std::abs(offset.x) && std::abs(offset.y) > std::abs(offset.z)) {
-            face = (offset.y > 0) ? 2 : 0; // top or bottom
-        } else {
-            face = (offset.z > 0) ? 4 : 5; // front or back
-        }
-
-        if (tMin < bestHit.distance) {
-            bestHit = { int(i), block, face, intersection, tMin };
-        }
-    }
-    return bestHit;
-}
 
 static void processKeyboard(GLFWwindow* win, Camera& cam, float dt) {
     glm::vec3 f = cam.front();
@@ -177,13 +109,10 @@ int main() {
     glfwMakeContextCurrent(win);
     glfwSwapInterval(1);
     glfwSetFramebufferSizeCallback(win, framebuffer_size_callback);
-    // glfwSetScrollCallback(win, scroll_callback);
 
     Texture2D tex[2]; // Define two textures
     tex[0].load("assets/tile.png");
     tex[1].load("assets/turf.png");
-
-
 
     glfwSetInputMode(win, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
     CubeMesh cube;
@@ -198,13 +127,13 @@ int main() {
     Camera cam;
     glfwSetWindowUserPointer(win, &cam);
 
-    std::vector<BlockInstance> terrainBlocks = makeTerrain(TERRAIN_WIDTH, TERRAIN_HEIGHT);
+    World world(makeTerrain(TERRAIN_WIDTH, TERRAIN_HEIGHT));
 
     bool needUpload = true;
-    const glm::vec3 kSpawn = glm::vec3(1.0f, -1.0f, 0.0f);
+    const glm::ivec3 kSpawn = glm::vec3(1.0f, -1.0f, 0.0f);
 
     InstanceVBO instanceVBO;
-    instanceVBO.update(terrainBlocks.data(), terrainBlocks.size());
+    renderer.buildInstanceBuffer(world.blocks(), instanceVBO);
 
     glBindVertexArray(cube.getVAO());
     glBindBuffer(GL_ARRAY_BUFFER, cube.getVBO()); // Bind cube.vbo, set per-vertex attributes 0 & 2
@@ -269,36 +198,36 @@ int main() {
         bool nowRight = glfwGetMouseButton(win, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS;
 
         if (nowLeft && !prevLeft) {
-            std::vector<glm::vec3> blockPositions;
-            for (const auto& b : terrainBlocks) blockPositions.push_back(b.offset);
-            BlockHitInfo hit = target_block_face(cam, blockPositions);
+            std::vector<glm::ivec3> blockPositions;
+            for (const auto& b : world.blocks()) blockPositions.push_back(b.pos);
+            BlockHitInfo hit = world.raycast(cam.pos, cam.front(), PLAYER_REACH);
             if (now - lastBreakTime > BREAK_COOLDOWN && hit.blockIndex != -1) {
-                terrainBlocks.erase(terrainBlocks.begin() + hit.blockIndex);
+                world.remove(world.blocks()[hit.blockIndex].pos);
                 needUpload = true;
                 lastBreakTime = now; // reset break cooldown
             }
         }
         if (nowRight && !prevRight) {
             std::vector<glm::vec3> blockPositions;
-            for (const auto& b : terrainBlocks) blockPositions.push_back(b.offset);
-            BlockHitInfo hit = target_block_face(cam, blockPositions);
+            for (const auto& b : world.blocks()) blockPositions.push_back(b.pos);
+            BlockHitInfo hit = world.raycast(cam.pos, cam.front(), PLAYER_REACH);
             if (hit.blockIndex != -1 && hit.faceIndex != -1) {
                 // Calculate spawn position: offset by 1 unit along the hit face normal
-                glm::vec3 faceNormals[] = {
-                    glm::vec3(0, -1, 0), // bottom
-                    glm::vec3(1, 0, 0), // right
-                    glm::vec3(0, 1, 0), // top
-                    glm::vec3(-1, 0, 0), // left
-                    glm::vec3(0, 0, 1), // front
-                    glm::vec3(0, 0, -1) // back
+                glm::ivec3 faceNormals[] = {
+                    glm::ivec3(0, -1, 0), // bottom
+                    glm::ivec3(1, 0, 0), // right
+                    glm::ivec3(0, 1, 0), // top
+                    glm::ivec3(-1, 0, 0), // left
+                    glm::ivec3(0, 0, 1), // front
+                    glm::ivec3(0, 0, -1) // back
                 };
-                glm::vec3 spawnPos = hit.blockPos + faceNormals[hit.faceIndex];
+                glm::ivec3 spawnPos = hit.blockPos + faceNormals[hit.faceIndex];
                 bool exists = false;
-                for (const auto& b : terrainBlocks) {
-                    if (b.offset == spawnPos) { exists = true; break; }
+                for (const auto& b : world.blocks()) {
+                    if (b.pos == spawnPos) { exists = true; break; }
                 }
                 if (now - lastPlaceTime > PLACE_COOLDOWN && !exists) {
-                    terrainBlocks.push_back({spawnPos, 0}); // tile.png for placed blocks
+                    world.add(Block{spawnPos, BlockId::Tile});
                     needUpload = true;
                     lastPlaceTime = now; // reset place cooldown
                 }
@@ -315,21 +244,21 @@ int main() {
 
         if (nowP && !prevP) {
             bool exists = false;
-            for (const auto& b : terrainBlocks) {
-                if (b.offset == kSpawn) { exists = true; break; }
+            for (const auto& b : world.blocks()) {
+                if (b.pos == kSpawn) { exists = true; break; }
             }
             if (!exists) {
-                terrainBlocks.push_back({kSpawn, 0}); // tile.png for placed blocks
+                world.add(Block{kSpawn, BlockId::Tile}); // tile.png for placed blocks
                 needUpload = true;
             }
         }
         if (nowO && !prevO) {
-            auto it = terrainBlocks.begin();
-            for (; it != terrainBlocks.end(); ++it) {
-                if (it->offset == kSpawn) break;
+            auto it = world.blocks().begin();
+            for (; it != world.blocks().end(); ++it) {
+                if (it->pos == kSpawn) break;
             }
-            if (it != terrainBlocks.end()) {
-                terrainBlocks.erase(it);
+            if (it != world.blocks().end()) {
+                world.remove(it->pos);
                 needUpload = true;
             }
         }
@@ -351,11 +280,11 @@ int main() {
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         if (needUpload) {
-            instanceVBO.update(terrainBlocks.data(), terrainBlocks.size());
+            renderer.buildInstanceBuffer(world.blocks(), instanceVBO);
             needUpload = false;
         }
 
-        renderer.draw(vp, terrainBlocks.size());
+        renderer.draw(vp, world.blocks().size());
 
         glfwSwapBuffers(win);
     }

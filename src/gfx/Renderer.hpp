@@ -1,7 +1,10 @@
 #pragma once
 #include "Shader.hpp"
 #include "Mesh.hpp"
+#include "InstanceBuffer.hpp"
+#include "../world/Block.hpp"
 #include <glm/glm.hpp>
+#include <vector>
 
 class Renderer {
 public:
@@ -10,6 +13,8 @@ public:
 
     void draw(const glm::mat4& vp, int instanceCount);
     ShaderProgram& shader() { return shader_; }
+
+    void buildInstanceBuffer(const std::vector<Block>& blocks, InstanceVBO& instanceVBO);
 
 private:
     ShaderProgram shader_;

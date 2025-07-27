@@ -1,4 +1,6 @@
+#pragma once
 #include <vector>
-#include "../gfx/InstanceBuffer.hpp"
+#include <glm/vec3.hpp>
+#include "Block.hpp"
 
-std::vector<BlockInstance> makeTerrain(int terrainWidth, int terrainHeight);
+std::vector<Block> makeTerrain(int terrainWidth, int terrainHeight);

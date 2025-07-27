@@ -20,6 +20,7 @@
 #include "world/Block.hpp"
 #include "world/TerrainGen.hpp"
 #include "world/World.hpp"
+#include "input/Input.hpp"
 
 #define GL_CALL(x) do { \
     x; \
@@ -78,19 +79,18 @@ static void scroll_callback(GLFWwindow* win, double xoffset, double yoffset) {
     cam->fov -= float(yoffset);
 }
 
-static void processKeyboard(GLFWwindow* win, Camera& cam, float dt) {
+static void processKeyboard(Input& input, GLFWwindow* win, Camera& cam, float dt) {
     glm::vec3 f = cam.front();
     glm::vec3 r = cam.right();
-    glm::vec3 u = glm::vec3(0,1,0); // use world up
-    // glm::vec3 u = cam.up(); // use camera up
+    glm::vec3 u = glm::vec3(0,1,0); // world up
     float v = cam.moveSpeed * dt;
 
-    if (glfwGetKey(win, GLFW_KEY_W) == GLFW_PRESS) cam.pos += f * v;
-    if (glfwGetKey(win, GLFW_KEY_S) == GLFW_PRESS) cam.pos -= f * v;
-    if (glfwGetKey(win, GLFW_KEY_D) == GLFW_PRESS) cam.pos += r * v;
-    if (glfwGetKey(win, GLFW_KEY_A) == GLFW_PRESS) cam.pos -= r * v;
-    if (glfwGetKey(win, GLFW_KEY_SPACE) == GLFW_PRESS) cam.pos += u * v;
-    if (glfwGetKey(win, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS) cam.pos -= u * v;
+    if (input.isDown(Key::W)) cam.pos += f * v;
+    if (input.isDown(Key::S)) cam.pos -= f * v;
+    if (input.isDown(Key::D)) cam.pos += r * v;
+    if (input.isDown(Key::A)) cam.pos -= r * v;
+    if (input.isDown(Key::Space)) cam.pos += u * v;
+    if (input.isDown(Key::Shift)) cam.pos -= u * v;
 }
 
 int main() {
@@ -105,6 +105,7 @@ int main() {
 #endif
 
     GLFWwindow* win = glfwCreateWindow(1280, 720, "TinyCraft", nullptr, nullptr);
+    Input input(win);
     if (!win) { glfwTerminate(); return 1; }
     glfwMakeContextCurrent(win);
     glfwSwapInterval(1);
@@ -166,26 +167,26 @@ int main() {
         lastTime = now;
 
         glfwPollEvents();
+        input.update();
 
-        if (glfwGetKey(win, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
+        if (input.isDown(Key::Escape)) {
             glfwSetInputMode(win, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
         }
         // on mouse click enter cursor lock
-        if (glfwGetMouseButton(win, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
+        if (input.isDown(Mouse::Left)) {
             glfwSetInputMode(win, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
             firstMouse = true; // reset mouse position
         }
 
         // Mouse look
         if (glfwGetInputMode(win, GLFW_CURSOR) == GLFW_CURSOR_DISABLED) {
-            double x, y;
-            glfwGetCursorPos(win, &x, &y);
+            glm::vec2 mousePos = input.mousePos();
             if (firstMouse) {
-                lastX = x; lastY = y; firstMouse = false;
+                lastX = mousePos.x; lastY = mousePos.y; firstMouse = false;
             }
-            double dx = x - lastX;
-            double dy = lastY - y; // invert y
-            lastX = x; lastY = y;
+            double dx = mousePos.x - lastX;
+            double dy = lastY - mousePos.y; // invert y
+            lastX = mousePos.x; lastY = mousePos.y;
 
             cam.yaw += float(dx) * cam.mouseSensitivity;
             cam.pitch += float(dy) * cam.mouseSensitivity;
@@ -194,12 +195,10 @@ int main() {
 
         // on mouse left click, check for block under crosshair and remove it
         static bool prevLeft = false, prevRight = false;
-        bool nowLeft = glfwGetMouseButton(win, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
-        bool nowRight = glfwGetMouseButton(win, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS;
+        bool nowLeft = input.isDown(Mouse::Left);
+        bool nowRight = input.isDown(Mouse::Right);
 
         if (nowLeft && !prevLeft) {
-            std::vector<glm::ivec3> blockPositions;
-            for (const auto& b : world.blocks()) blockPositions.push_back(b.pos);
             BlockHitInfo hit = world.raycast(cam.pos, cam.front(), PLAYER_REACH);
             if (now - lastBreakTime > BREAK_COOLDOWN && hit.blockIndex != -1) {
                 world.remove(world.blocks()[hit.blockIndex].pos);
@@ -208,11 +207,8 @@ int main() {
             }
         }
         if (nowRight && !prevRight) {
-            std::vector<glm::vec3> blockPositions;
-            for (const auto& b : world.blocks()) blockPositions.push_back(b.pos);
             BlockHitInfo hit = world.raycast(cam.pos, cam.front(), PLAYER_REACH);
             if (hit.blockIndex != -1 && hit.faceIndex != -1) {
-                // Calculate spawn position: offset by 1 unit along the hit face normal
                 glm::ivec3 faceNormals[] = {
                     glm::ivec3(0, -1, 0), // bottom
                     glm::ivec3(1, 0, 0), // right
@@ -236,34 +232,7 @@ int main() {
         prevLeft = nowLeft;
         prevRight = nowRight;
 
-        processKeyboard(win, cam, dt);
-        
-        static bool prevP = false, prevO = false;
-        bool nowP = glfwGetKey(win, GLFW_KEY_P) == GLFW_PRESS;
-        bool nowO = glfwGetKey(win, GLFW_KEY_O) == GLFW_PRESS;
-
-        if (nowP && !prevP) {
-            bool exists = false;
-            for (const auto& b : world.blocks()) {
-                if (b.pos == kSpawn) { exists = true; break; }
-            }
-            if (!exists) {
-                world.add(Block{kSpawn, BlockId::Tile}); // tile.png for placed blocks
-                needUpload = true;
-            }
-        }
-        if (nowO && !prevO) {
-            auto it = world.blocks().begin();
-            for (; it != world.blocks().end(); ++it) {
-                if (it->pos == kSpawn) break;
-            }
-            if (it != world.blocks().end()) {
-                world.remove(it->pos);
-                needUpload = true;
-            }
-        }
-        prevP = nowP;
-        prevO = nowO;
+        processKeyboard(input, win, cam, dt);
 
         int w, h; glfwGetFramebufferSize(win, &w, &h);
         float aspect = (h>0) ? (float)w / (float)h : 1.0f;

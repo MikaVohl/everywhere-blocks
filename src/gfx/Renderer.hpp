@@ -21,4 +21,5 @@ private:
     ShaderProgram shader_;
     const CubeMesh& mesh_;
     GLint uVP_;
+    std::vector<BlockInstance> instanceBuffer_;
 };

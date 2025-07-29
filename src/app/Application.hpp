@@ -16,7 +16,6 @@ private:
     void processInput(float dt);
     void handleMouseLook();
     void handleBlockActions();
-    void uploadInstances();
 
     GLFWwindow* window_ = nullptr;
     std::unique_ptr<Input> input_;

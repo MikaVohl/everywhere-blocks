@@ -5,7 +5,7 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_package(glfw3 REQUIRED)
-find_package(glm REQUIRED) # we’ll use it soon; harmless if unused right now
+find_package(glm REQUIRED)
 
 add_executable(tinycraft
     src/main.cpp

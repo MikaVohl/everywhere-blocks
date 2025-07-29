@@ -7,7 +7,7 @@ World::World(std::vector<Block> blocks) {
     blocks_ = std::move(blocks);
 }
 
-std::vector<Block> World::blocks() {
+const std::vector<Block>& World::blocks() const {
     return blocks_;
 }
 

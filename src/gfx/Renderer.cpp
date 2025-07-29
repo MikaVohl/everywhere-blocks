@@ -17,15 +17,15 @@ void Renderer::draw(const glm::mat4& vp, int instanceCount) {
 }
 
 void Renderer::buildInstanceBuffer(const std::vector<Block>& blocks, InstanceVBO& instanceVBO) {
-    std::vector<BlockInstance> instances;
-    instances.reserve(blocks.size());
+    instanceBuffer_.clear();
+    instanceBuffer_.reserve(blocks.size());
     for (const Block& block : blocks) {
-        instances.push_back(BlockInstance{
-            glm::vec3(block.pos), // convert ivec3 to vec3
-            static_cast<int>(block.id) // assuming BlockId can be cast to int
+        instanceBuffer_.push_back(BlockInstance{
+            glm::vec3(block.pos),
+            static_cast<int>(block.id)
         });
     }
-    instanceVBO.update(instances.data(), instances.size());
+    instanceVBO.update(instanceBuffer_.data(), instanceBuffer_.size());
 }
 
 void Renderer::setupAttributes(const CubeMesh& cube, const InstanceVBO& inst)

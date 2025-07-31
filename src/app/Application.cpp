@@ -22,6 +22,27 @@ static void framebuffer_size_callback(GLFWwindow*, int w, int h) {
     glViewport(0, 0, w, h);
 }
 
+static const char* kGuiVS = R"(
+#version 330 core
+layout(location = 0) in vec2 aPos;
+layout(location = 1) in vec2 aUV;
+out vec2 vUV;
+void main() {
+    gl_Position = vec4(aPos, 0.0, 1.0);
+    vUV = aUV;
+}
+)";
+
+static const char* kGuiFS = R"(
+#version 330 core
+in vec2 vUV;
+uniform sampler2D uTex;
+out vec4 FragColor;
+void main() {
+    FragColor = texture(uTex, vUV);
+}
+)";
+
 Application::Application(int width, int height, const char* title) {
     glfwSetErrorCallback(glfw_error_callback);
     if (!glfwInit()) throw std::runtime_error("GLFW init failed");
@@ -39,6 +60,7 @@ Application::Application(int width, int height, const char* title) {
     input_ = std::make_unique<Input>(window_);
     tex_[0].load("assets/tile.png");
     tex_[1].load("assets/turf.png");
+    crosshairTex_.load("assets/crosshair.png");
     glfwSetInputMode(window_, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
     static const char* kVS = R"(
     #version 330 core
@@ -85,12 +107,42 @@ Application::Application(int width, int height, const char* title) {
     world_ = std::make_unique<World>(makeTerrain(32, 4));
     renderer_->buildInstanceBuffer(world_->blocks(), instanceVBO_);
     needUpload_ = true;
+    initHUD();
     lastTime_ = glfwGetTime();
 }
 
 Application::~Application() {
+    if (hudEbo_) glDeleteBuffers(1, &hudEbo_);
+    if (hudVbo_) glDeleteBuffers(1, &hudVbo_);
+    if (hudVao_) glDeleteVertexArrays(1, &hudVao_);
     glfwDestroyWindow(window_);
     glfwTerminate();
+}
+
+void Application::initHUD() {
+    // Create GUI shader
+    guiShader_ = std::make_unique<ShaderProgram>(kGuiVS, kGuiFS);
+    guiShader_->use();
+    glUniform1i(glGetUniformLocation(guiShader_->id(), "uTex"), 2); // crosshair on unit 2
+
+    glGenVertexArrays(1, &hudVao_);
+    glBindVertexArray(hudVao_);
+
+    glGenBuffers(1, &hudVbo_);
+    glBindBuffer(GL_ARRAY_BUFFER, hudVbo_);
+    glBufferData(GL_ARRAY_BUFFER, 4 * 4 * sizeof(float), nullptr, GL_DYNAMIC_DRAW); // 4 verts, (x,y,u,v)
+
+    glEnableVertexAttribArray(0); // aPos
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(1); // aUV
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)(2 * sizeof(float)));
+
+    static const unsigned idx[6] = { 0,2,1,   2,0,3 };
+    glGenBuffers(1, &hudEbo_);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, hudEbo_);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(idx), idx, GL_STATIC_DRAW);
+
+    glBindVertexArray(0);
 }
 
 void Application::run() {
@@ -118,8 +170,43 @@ void Application::run() {
             needUpload_ = false;
         }
         renderer_->draw(vp, world_->blocks().size());
+        drawHUD(w, h);
         glfwSwapBuffers(window_);
     }
+}
+
+void Application::drawHUD(int fbw, int fbh) {
+    if (fbw <= 0 || fbh <= 0) return;
+
+    // Convert desired pixel size to NDC half-extent:
+    float hx = (float)crosshairPx_ / (float)fbw;
+    float hy = (float)crosshairPx_ / (float)fbh;
+
+    const float verts[4 * 4] = {
+        // x,    y,    u, v
+        -hx,  +hy,   0, 1,
+        +hx,  +hy,   1, 1,
+        +hx,  -hy,   1, 0,
+        -hx,  -hy,   0, 0,
+    };
+
+    glDisable(GL_DEPTH_TEST);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+    guiShader_->use();
+    glActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, crosshairTex_.texID);
+
+    glBindVertexArray(hudVao_);
+    glBindBuffer(GL_ARRAY_BUFFER, hudVbo_);
+    glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(verts), verts);
+
+    glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+
+    glBindVertexArray(0);
+    glDisable(GL_BLEND);
+    glEnable(GL_DEPTH_TEST);
 }
 
 void Application::processInput(float dt) {

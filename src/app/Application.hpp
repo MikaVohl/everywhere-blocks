@@ -16,6 +16,8 @@ private:
     void processInput(float dt);
     void handleMouseLook();
     void handleBlockActions();
+    void initHUD();
+    void drawHUD(int fbw, int fbh);
 
     GLFWwindow* window_ = nullptr;
     std::unique_ptr<Input> input_;
@@ -24,6 +26,7 @@ private:
     std::unique_ptr<Camera> camera_;
     InstanceVBO instanceVBO_;
     Texture2D tex_[2];
+    Texture2D crosshairTex_;
     bool needUpload_ = true;
     double lastPlaceTime_ = 0.0;
     double lastBreakTime_ = 0.0;
@@ -31,4 +34,8 @@ private:
     double lastX_ = 0.0, lastY_ = 0.0;
     bool firstMouse_ = true;
     std::unique_ptr<CubeMesh> cube_;
+
+    std::unique_ptr<ShaderProgram> guiShader_;
+    GLuint hudVao_ = 0, hudVbo_ = 0, hudEbo_ = 0;
+    int crosshairPx_ = 100;
 };

@@ -3,7 +3,8 @@
 
 enum class BlockId {
     Tile,
-    Turf
+    Turf,
+    Cardboard
 };
 
 struct Block {

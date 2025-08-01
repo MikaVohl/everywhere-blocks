@@ -25,7 +25,7 @@ private:
     std::unique_ptr<World> world_;
     std::unique_ptr<Camera> camera_;
     InstanceVBO instanceVBO_;
-    Texture2D tex_[2];
+    Texture2D tex_[3];
     Texture2D crosshairTex_;
     bool needUpload_ = true;
     double lastPlaceTime_ = 0.0;
@@ -33,6 +33,7 @@ private:
     double lastTime_ = 0.0;
     double lastX_ = 0.0, lastY_ = 0.0;
     bool firstMouse_ = true;
+    int heldBlockId_ = -1; // -1 for no block held, otherwise the ID of the held block
     std::unique_ptr<CubeMesh> cube_;
 
     std::unique_ptr<ShaderProgram> guiShader_;

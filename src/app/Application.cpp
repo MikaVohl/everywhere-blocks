@@ -7,21 +7,6 @@
 #include <cstdio>
 #include <array>
 
-#define GL_CALL(x) do { \
-    x; \
-    GLenum err = glGetError(); \
-    if (err != GL_NO_ERROR) { \
-        fprintf(stderr, "GL error 0x%x at %s:%d\n", err, __FILE__, __LINE__); \
-    } \
-} while(0)
-
-static void glfw_error_callback(int code, const char* desc) {
-    fprintf(stderr, "GLFW error %d: %s\n", code, desc);
-}
-static void framebuffer_size_callback(GLFWwindow*, int w, int h) {
-    glViewport(0, 0, w, h);
-}
-
 static const char* kGuiVS = R"(
 #version 330 core
 layout(location = 0) in vec2 aPos;
@@ -44,24 +29,22 @@ void main() {
 )";
 
 Application::Application(int width, int height, const char* title) {
-    glfwSetErrorCallback(glfw_error_callback);
-    if (!glfwInit()) throw std::runtime_error("GLFW init failed");
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
-    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+    if (!glfwInit()) throw std::runtime_error("GLFW init failed"); // Initialize GLFW
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3); // OpenGL version 3._
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3); // OpenGL version _.3 -> makes 3.3
+    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE); // Use core profile
 #ifdef __APPLE__
-    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
+    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE); // required for macOS
 #endif
-    window_ = glfwCreateWindow(width, height, title, nullptr, nullptr);
-    if (!window_) { glfwTerminate(); throw std::runtime_error("Window creation failed"); }
-    glfwMakeContextCurrent(window_);
-    glfwSwapInterval(1);
-    glfwSetFramebufferSizeCallback(window_, framebuffer_size_callback);
+    window_ = glfwCreateWindow(width, height, title, nullptr, nullptr); // creates a window
+    glfwMakeContextCurrent(window_); // specify the above window as the current context
+    glfwSwapInterval(1); // the number of screen updates to wait from the time glfwSwapBuffers was called before swapping the buffers and returning. Sets framerate to monitor refresh rate
     input_ = std::make_unique<Input>(window_);
     tex_[0].load("assets/tile.png");
     tex_[1].load("assets/turf.png");
+    tex_[2].load("assets/cardboard.png");
     crosshairTex_.load("assets/crosshair.png");
-    glfwSetInputMode(window_, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+    glfwSetInputMode(window_, GLFW_CURSOR, GLFW_CURSOR_DISABLED); // Hide and disable mouse cursor when in the window
     static const char* kVS = R"(
     #version 330 core
     layout (location = 0) in vec3 aPos;
@@ -84,7 +67,7 @@ Application::Application(int width, int height, const char* title) {
     #version 330 core
     in vec2 vUV;
     flat in int vTexIndex;
-    uniform sampler2D uTex[2];
+    uniform sampler2D uTex[3];
     out vec4 FragColor;
     void main() {
         FragColor = texture(uTex[vTexIndex], vUV);
@@ -97,11 +80,13 @@ Application::Application(int width, int height, const char* title) {
     renderer_->setupAttributes(*cube_, instanceVBO_);
     
     glUseProgram(renderer_->shader().id());
-    glUniform1iv(glGetUniformLocation(renderer_->shader().id(), "uTex"), 2, (int[]){0,1});
+    glUniform1iv(glGetUniformLocation(renderer_->shader().id(), "uTex"), 3, (int[]){0,1,2});
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, tex_[0].texID);
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, tex_[1].texID);
+    glActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, tex_[2].texID);
     camera_ = std::make_unique<Camera>();
     glfwSetWindowUserPointer(window_, camera_.get());
     world_ = std::make_unique<World>(makeTerrain(32, 4));
@@ -123,7 +108,7 @@ void Application::initHUD() {
     // Create GUI shader
     guiShader_ = std::make_unique<ShaderProgram>(kGuiVS, kGuiFS);
     guiShader_->use();
-    glUniform1i(glGetUniformLocation(guiShader_->id(), "uTex"), 2); // crosshair on unit 2
+    glUniform1i(glGetUniformLocation(guiShader_->id(), "uTex"), 10); // crosshair on unit 10
 
     glGenVertexArrays(1, &hudVao_);
     glBindVertexArray(hudVao_);
@@ -195,7 +180,7 @@ void Application::drawHUD(int fbw, int fbh) {
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
     guiShader_->use();
-    glActiveTexture(GL_TEXTURE2);
+    glActiveTexture(GL_TEXTURE10);
     glBindTexture(GL_TEXTURE_2D, crosshairTex_.texID);
 
     glBindVertexArray(hudVao_);
@@ -211,7 +196,11 @@ void Application::drawHUD(int fbw, int fbh) {
 
 void Application::processInput(float dt) {
     glm::vec3 f = camera_->front();
+    f.y = 0.0f; // ignore vertical component for movement
+    f = glm::normalize(f); // normalize to ensure consistent speed
     glm::vec3 r = camera_->right();
+    r.y = 0.0f; // ignore vertical component for movement
+    r = glm::normalize(r); // normalize to ensure consistent speed
     glm::vec3 u = glm::vec3(0,1,0);
     float v = camera_->moveSpeed * dt;
     if (input_->isDown(Key::W)) camera_->pos += f * v;
@@ -220,13 +209,15 @@ void Application::processInput(float dt) {
     if (input_->isDown(Key::A)) camera_->pos -= r * v;
     if (input_->isDown(Key::Space)) camera_->pos += u * v;
     if (input_->isDown(Key::Shift)) camera_->pos -= u * v;
-    if (input_->isDown(Key::Escape)) {
-        glfwSetInputMode(window_, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
-    }
+    if (input_->isDown(Key::Escape)) glfwSetInputMode(window_, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
     if (input_->isDown(Mouse::Left)) {
         glfwSetInputMode(window_, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
         firstMouse_ = true;
     }
+    if (input_->wasPressed(Key::N1)) heldBlockId_ = 0; // Tile
+    if (input_->wasPressed(Key::N2)) heldBlockId_ = 1; // Turf
+    if (input_->wasPressed(Key::N3)) heldBlockId_ = 2; // Cardboard
+    if (input_->wasPressed(Key::N0)) heldBlockId_ = -1; // No block held
 }
 
 void Application::handleMouseLook() {
@@ -240,7 +231,7 @@ void Application::handleMouseLook() {
         lastX_ = mousePos.x; lastY_ = mousePos.y;
         camera_->yaw += float(dx) * camera_->mouseSensitivity;
         camera_->pitch += float(dy) * camera_->mouseSensitivity;
-        camera_->pitch = glm::clamp(camera_->pitch, -89.0f, 89.0f);
+        camera_->pitch = glm::clamp(camera_->pitch, -89.9f, 89.9f);
     }
 }
 
@@ -277,7 +268,7 @@ void Application::handleBlockActions() {
                 if (b.pos == spawnPos) { exists = true; break; }
             }
             if (now - lastPlaceTime_ > PLACE_COOLDOWN && !exists) {
-                world_->add(Block{spawnPos, BlockId::Tile});
+                world_->add(Block{spawnPos, static_cast<BlockId>(heldBlockId_)});
                 needUpload_ = true;
                 lastPlaceTime_ = now;
             }

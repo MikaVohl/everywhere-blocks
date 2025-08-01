@@ -5,7 +5,9 @@
 
 enum class Key : int {
     W = GLFW_KEY_W, A = GLFW_KEY_A, S = GLFW_KEY_S, D = GLFW_KEY_D, Space = GLFW_KEY_SPACE, Shift = GLFW_KEY_LEFT_SHIFT, Escape = GLFW_KEY_ESCAPE,
-    P = GLFW_KEY_P, O = GLFW_KEY_O, Left = GLFW_KEY_LEFT, Right = GLFW_KEY_RIGHT, Up = GLFW_KEY_UP, Down = GLFW_KEY_DOWN
+    P = GLFW_KEY_P, O = GLFW_KEY_O, Left = GLFW_KEY_LEFT, Right = GLFW_KEY_RIGHT, Up = GLFW_KEY_UP, Down = GLFW_KEY_DOWN, N1 = GLFW_KEY_1,
+    N2 = GLFW_KEY_2, N3 = GLFW_KEY_3, N4 = GLFW_KEY_4, N5 = GLFW_KEY_5, N6 = GLFW_KEY_6, N7 = GLFW_KEY_7, N8 = GLFW_KEY_8, N9 = GLFW_KEY_9,
+    N0 = GLFW_KEY_0
 };
 
 enum class Mouse : int {
